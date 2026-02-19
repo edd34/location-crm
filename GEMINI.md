@@ -1,0 +1,2 @@
+ > let me give you the plan : I want to create a firefox extension that will be connected to to notion tab. When I click on the extension, it will let me add a couple of information related to a rent I'm searching (address, city, price,  
+   time to work, area, price, has parking or cave, and a dropdown list for the state, phone number,  url will be grabbed automatically). When I click on add, it will compare check if this entry already exists or not in the database.      

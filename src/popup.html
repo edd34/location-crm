@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Notion Rent Tracker</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="config-section" class="hidden">
+    <h3>Notion Config</h3>
+    <input type="password" id="api-key" placeholder="Notion API Key">
+    <input type="text" id="database-id" placeholder="Database ID">
+    <button id="save-config">Save Config</button>
+  </div>
+
+  <div id="main-section">
+    <header>
+      <h3>Add Rent</h3>
+      <button id="settings-btn" title="Settings">⚙️</button>
+    </header>
+    <form id="rent-form">
+      <div class="field">
+        <label for="address">Address:</label>
+        <input type="text" id="address" name="address" required>
+      </div>
+      <div class="field">
+        <label for="city">City:</label>
+        <input type="text" id="city" name="city" required>
+      </div>
+      <div class="field">
+        <label for="price">Price (€):</label>
+        <input type="number" id="price" name="price" required>
+      </div>
+      <div class="field">
+        <label for="time_to_work">Time to work (min):</label>
+        <input type="number" id="time_to_work" name="time_to_work">
+      </div>
+      <div class="field">
+        <label for="area">Area (m²):</label>
+        <input type="number" id="area" name="area">
+      </div>
+      <div class="checkbox-group">
+        <label><input type="checkbox" id="has_parking" name="has_parking"> Has Parking</label>
+        <label><input type="checkbox" id="has_cave" name="has_cave"> Has Cave</label>
+      </div>
+      <div class="field">
+        <label for="state">State:</label>
+        <select id="state" name="state">
+          <option value="Interested">Interested</option>
+          <option value="Contacted">Contacted</option>
+          <option value="Visited">Visited</option>
+          <option value="Applied">Applied</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="phone">Phone Number:</label>
+        <input type="tel" id="phone" name="phone">
+      </div>
+      <div class="field">
+        <label for="url">URL:</label>
+        <input type="text" id="url" name="url" readonly>
+      </div>
+      <button type="submit" id="add-btn">Add to Notion</button>
+      <div id="status"></div>
+    </form>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

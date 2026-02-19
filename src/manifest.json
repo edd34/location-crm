@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Notion Rent Tracker",
+  "version": "1.0",
+  "description": "Add rent information directly to Notion from any tab.",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://api.notion.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "notion-rent-tracker@example.com"
+    }
+  }
+}
