@@ -143,7 +143,7 @@ async function addToNotion(apiKey, databaseId, data) {
         title: [{ text: { content: data.title } }]
       },
       'Address': {
-        rich_text: [{ text: { content: data.address } }]
+        rich_text: data.address ? [{ text: { content: data.address } }] : []
       },
       'Price': {
         number: parseFloat(data.price)
