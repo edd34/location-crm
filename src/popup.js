@@ -8,12 +8,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const statusDiv = document.getElementById('status');
   const urlInput = document.getElementById('url');
   const addressInput = document.getElementById('address');
+  const titleInput = document.getElementById('title');
 
   // Load Config
   const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId']);
   if (savedConfig.apiKey) document.getElementById('api-key').value = savedConfig.apiKey;
   if (savedConfig.databaseId) document.getElementById('database-id').value = savedConfig.databaseId;
-  
+
   if (!savedConfig.apiKey || !savedConfig.databaseId) {
     configSection.classList.remove('hidden');
   }
@@ -24,13 +25,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (tabs && tabs[0]) {
       const tab = tabs[0];
       urlInput.value = tab.url;
-      // Optionally pre-fill address with title if it looks like one, or just the title
-      addressInput.value = tab.title;
+      titleInput.value = tab.title;
+      // Pre-fill address with title if it looks like one, or just the title
+      addressInput.value = "";
     }
   } catch (err) {
     console.error("Could not get current tab info", err);
   }
-
   settingsBtn.addEventListener('click', () => {
     configSection.classList.toggle('hidden');
   });
@@ -53,7 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     data.has_cave = document.getElementById('has_cave').checked;
 
     const { apiKey, databaseId } = await browserAPI.storage.local.get(['apiKey', 'databaseId']);
-    
+
     if (!apiKey || !databaseId) {
       statusDiv.textContent = 'Please configure API key and Database ID first!';
       statusDiv.style.color = 'red';
@@ -63,7 +64,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     statusDiv.textContent = 'Checking if exists...';
     statusDiv.style.color = 'blue';
-    
+
     try {
       const exists = await checkIfExists(apiKey, databaseId, data.url);
       if (exists) {
@@ -74,7 +75,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       statusDiv.textContent = 'Adding to Notion...';
       const response = await addToNotion(apiKey, databaseId, data);
-      
+
       if (response.ok) {
         statusDiv.textContent = 'Added successfully!';
         statusDiv.style.color = 'green';
@@ -83,6 +84,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const tabs = await browserAPI.tabs.query({ active: true, currentWindow: true });
         if (tabs[0]) {
           urlInput.value = tabs[0].url;
+          titleInput.value = tabs[0].title;
           addressInput.value = tabs[0].title;
         }
       } else {
@@ -137,8 +139,11 @@ async function addToNotion(apiKey, databaseId, data) {
   const body = {
     parent: { database_id: databaseId },
     properties: {
-      'Name': {
-        title: [{ text: { content: data.address } }]
+      'Title': {
+        title: [{ text: { content: data.title } }]
+      },
+      'Address': {
+        rich_text: [{ text: { content: data.address } }]
       },
       'Price': {
         number: parseFloat(data.price)
@@ -156,7 +161,7 @@ async function addToNotion(apiKey, databaseId, data) {
         checkbox: data.has_cave
       },
       'State': {
-        select: { name: data.state }
+        status: { name: data.state }
       },
       'Phone': {
         phone_number: data.phone || null

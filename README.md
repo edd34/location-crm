@@ -12,14 +12,15 @@ This extension allows you to quickly add rental property information to a Notion
 1.  **Create a Notion Database:**
     - Create a new database in Notion (e.g., "Rental Searches").
     - Add the following properties with the EXACT names and types:
-        - `Name` (Type: Title)
+        - `Title` (Type: Title)
+        - `Address` (Type: Text/Rich Text)
         - `Price` (Type: Number)
         - `City` (Type: Text/Rich Text)
         - `Time to Work` (Type: Number)
         - `Area` (Type: Number)
         - `Has Parking` (Type: Checkbox)
         - `Has Cave` (Type: Checkbox)
-        - `State` (Type: Select) - Recommended options: "Interested", "Contacted", "Visited", "Applied", "Rejected"
+        - `State` (Type: Status) - Recommended options: "Interested", "Contacted", "Visited", "Applied", "Rejected"
         - `Phone` (Type: Phone Number)
         - `URL` (Type: URL)
 
