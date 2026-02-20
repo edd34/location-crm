@@ -23,6 +23,7 @@ This extension allows you to quickly add rental property information to a Notion
         - `State` (Type: Status) - Recommended options: "Interested", "Contacted", "Visited", "Applied", "Rejected"
         - `Phone` (Type: Phone Number)
         - `URL` (Type: URL)
+        - `Date Added` (Type: Date)
 
 2.  **Create a Notion Integration:**
     - Go to [Notion Developers - My Integrations](https://www.notion.so/my-integrations).

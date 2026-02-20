@@ -247,6 +247,9 @@ async function addToNotion(apiKey, databaseId, data) {
       },
       'City': {
         rich_text: [{ text: { content: data.city } }]
+      },
+      'Date Added': {
+        date: { start: new Date().toISOString() }
       }
     }
   };
