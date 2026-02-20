@@ -12,11 +12,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const magicFillBtn = document.getElementById('magic-fill');
 
   // Load Config
-  const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId', 'llmUrl', 'llmModel']);
+  const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId', 'llmUrl', 'llmModel', 'userPhone']);
   if (savedConfig.apiKey) document.getElementById('api-key').value = savedConfig.apiKey;
   if (savedConfig.databaseId) document.getElementById('database-id').value = savedConfig.databaseId;
   if (savedConfig.llmUrl) document.getElementById('llm-url').value = savedConfig.llmUrl;
   if (savedConfig.llmModel) document.getElementById('llm-model').value = savedConfig.llmModel;
+  if (savedConfig.userPhone) document.getElementById('user-phone').value = savedConfig.userPhone;
 
   if (!savedConfig.apiKey || !savedConfig.databaseId) {
     configSection.classList.remove('hidden');
@@ -44,7 +45,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const databaseId = document.getElementById('database-id').value.trim();
     const llmUrl = document.getElementById('llm-url').value.trim();
     const llmModel = document.getElementById('llm-model').value.trim();
-    await browserAPI.storage.local.set({ apiKey, databaseId, llmUrl, llmModel });
+    const userPhone = document.getElementById('user-phone').value.trim();
+    await browserAPI.storage.local.set({ apiKey, databaseId, llmUrl, llmModel, userPhone });
     statusDiv.textContent = 'Config saved!';
     statusDiv.style.color = 'green';
     configSection.classList.add('hidden');
@@ -52,7 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   magicFillBtn.addEventListener('click', async () => {
-    const { llmUrl, llmModel } = await browserAPI.storage.local.get(['llmUrl', 'llmModel']);
+    const { llmUrl, llmModel, userPhone } = await browserAPI.storage.local.get(['llmUrl', 'llmModel', 'userPhone']);
     const url = llmUrl || 'http://localhost:11434/api/generate';
     const model = llmModel || 'hf.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF:F16';
 
@@ -63,7 +65,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       const [tab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
       const scriptResult = await browserAPI.scripting.executeScript({
         target: { tabId: tab.id },
-        func: () => document.body.innerText,
+        func: () => {
+          const clone = document.body.cloneNode(true);
+          const tagsToRemove = ['script', 'style', 'img', 'noscript', 'iframe', 'svg'];
+          tagsToRemove.forEach(tag => {
+            const elements = clone.querySelectorAll(tag);
+            elements.forEach(el => el.remove());
+          });
+          return clone.innerText;
+        },
       });
       const pageText = scriptResult[0].result;
 
@@ -79,8 +89,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       has_cave (boolean), 
       phone (phone number).
       
+      IMPORTANT: If the phone number found is ${userPhone || 'the user\'s personal phone number'}, DO NOT include it. Return null for phone if no other number is found.
 
-      NB : phone number can't be 0658987329
       Text:
       ${pageText.substring(0, 4000)}`;
 
