@@ -12,8 +12,28 @@ header {
   margin-bottom: 10px;
 }
 
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+#magic-fill {
+  background-color: #6200ee;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#magic-fill:hover {
+  background-color: #3700b3;
+}
+
 h3 {
   margin: 0;
+  font-size: 14px;
 }
 
 #settings-btn {

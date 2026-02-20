@@ -10,13 +10,20 @@
     <h3>Notion Config</h3>
     <input type="password" id="api-key" placeholder="Notion API Key">
     <input type="text" id="database-id" placeholder="Database ID">
+    <hr>
+    <h3>LLM Config (Ollama)</h3>
+    <input type="text" id="llm-url" placeholder="LLM URL (http://localhost:11434/api/generate)" value="http://localhost:11434/api/generate">
+    <input type="text" id="llm-model" placeholder="Model (e.g., llama3)" value="llama3">
     <button id="save-config">Save Config</button>
   </div>
 
   <div id="main-section">
     <header>
       <h3>Add Rent</h3>
-      <button id="settings-btn" title="Settings">⚙️</button>
+      <div class="actions">
+        <button id="magic-fill" title="Auto-fill with LLM">✨ AI Fill</button>
+        <button id="settings-btn" title="Settings">⚙️</button>
+      </div>
     </header>
     <form id="rent-form">
       <div class="field">

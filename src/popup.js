@@ -9,11 +9,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const urlInput = document.getElementById('url');
   const addressInput = document.getElementById('address');
   const titleInput = document.getElementById('title');
+  const magicFillBtn = document.getElementById('magic-fill');
 
   // Load Config
-  const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId']);
+  const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId', 'llmUrl', 'llmModel']);
   if (savedConfig.apiKey) document.getElementById('api-key').value = savedConfig.apiKey;
   if (savedConfig.databaseId) document.getElementById('database-id').value = savedConfig.databaseId;
+  if (savedConfig.llmUrl) document.getElementById('llm-url').value = savedConfig.llmUrl;
+  if (savedConfig.llmModel) document.getElementById('llm-model').value = savedConfig.llmModel;
 
   if (!savedConfig.apiKey || !savedConfig.databaseId) {
     configSection.classList.remove('hidden');
@@ -26,12 +29,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       const tab = tabs[0];
       urlInput.value = tab.url;
       titleInput.value = tab.title;
-      // Pre-fill address with title if it looks like one, or just the title
       addressInput.value = "";
     }
   } catch (err) {
     console.error("Could not get current tab info", err);
   }
+
   settingsBtn.addEventListener('click', () => {
     configSection.classList.toggle('hidden');
   });
@@ -39,11 +42,84 @@ document.addEventListener('DOMContentLoaded', async () => {
   saveConfigBtn.addEventListener('click', async () => {
     const apiKey = document.getElementById('api-key').value.trim();
     const databaseId = document.getElementById('database-id').value.trim();
-    await browserAPI.storage.local.set({ apiKey, databaseId });
+    const llmUrl = document.getElementById('llm-url').value.trim();
+    const llmModel = document.getElementById('llm-model').value.trim();
+    await browserAPI.storage.local.set({ apiKey, databaseId, llmUrl, llmModel });
     statusDiv.textContent = 'Config saved!';
     statusDiv.style.color = 'green';
     configSection.classList.add('hidden');
     setTimeout(() => statusDiv.textContent = '', 2000);
+  });
+
+  magicFillBtn.addEventListener('click', async () => {
+    const { llmUrl, llmModel } = await browserAPI.storage.local.get(['llmUrl', 'llmModel']);
+    const url = llmUrl || 'http://localhost:11434/api/generate';
+    const model = llmModel || 'hf.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF:F16';
+
+    statusDiv.textContent = 'Extracting page content...';
+    statusDiv.style.color = 'blue';
+
+    try {
+      const [tab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
+      const scriptResult = await browserAPI.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => document.body.innerText,
+      });
+      const pageText = scriptResult[0].result;
+
+      statusDiv.textContent = 'AI is thinking...';
+      const prompt = `Extract rental property information from this webpage text. Return ONLY a JSON object with these keys: 
+      title (short descriptive title), 
+      address (full address if found), 
+      city (city only), 
+      price (number only), 
+      area (number only, in m2), 
+      time_to_work (estimated travel time in minutes if mentioned, else null), 
+      has_parking (boolean), 
+      has_cave (boolean), 
+      phone (phone number).
+      
+      Text:
+      ${pageText.substring(0, 4000)}`;
+
+      // Use background script to bypass CORS
+      browserAPI.runtime.sendMessage({
+        type: 'FETCH_LLM',
+        url: url,
+        body: {
+          model: model,
+          prompt: prompt,
+          stream: false,
+          format: 'json'
+        }
+      }, (response) => {
+        if (!response || !response.success) {
+          statusDiv.textContent = 'AI Fill Error: ' + (response ? response.error : 'No response from background');
+          statusDiv.style.color = 'red';
+          return;
+        }
+
+        const extracted = JSON.parse(response.data.response);
+
+        // Fill form
+        if (extracted.title) titleInput.value = extracted.title;
+        if (extracted.address) addressInput.value = extracted.address;
+        if (extracted.city) document.getElementById('city').value = extracted.city;
+        if (extracted.price) document.getElementById('price').value = extracted.price;
+        if (extracted.area) document.getElementById('area').value = extracted.area;
+        if (extracted.time_to_work) document.getElementById('time_to_work').value = extracted.time_to_work;
+        if (extracted.has_parking !== undefined) document.getElementById('has_parking').checked = extracted.has_parking;
+        if (extracted.has_cave !== undefined) document.getElementById('has_cave').checked = extracted.has_cave;
+        if (extracted.phone) document.getElementById('phone').value = extracted.phone;
+
+        statusDiv.textContent = 'AI Fill complete!';
+        statusDiv.style.color = 'green';
+      });
+    } catch (error) {
+      statusDiv.textContent = 'AI Fill Error: ' + error.message;
+      statusDiv.style.color = 'red';
+      console.error(error);
+    }
   });
 
   form.addEventListener('submit', async (e) => {
@@ -85,7 +161,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (tabs[0]) {
           urlInput.value = tabs[0].url;
           titleInput.value = tabs[0].title;
-          addressInput.value = tabs[0].title;
+          addressInput.value = "";
         }
       } else {
         const errData = await response.json();
@@ -129,8 +205,6 @@ async function checkIfExists(apiKey, databaseId, url) {
     return result.results.length > 0;
   } catch (error) {
     console.error("CheckIfExists error:", error);
-    // If property 'URL' doesn't exist, we might want to know, but for now we'll assume it's okay to proceed if query fails?
-    // Actually better to throw so user knows something is wrong with setup.
     throw error;
   }
 }

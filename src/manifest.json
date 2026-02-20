@@ -5,11 +5,17 @@
   "description": "Add rent information directly to Notion from any tab.",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "scripting"
   ],
   "host_permissions": [
-    "https://api.notion.com/*"
+    "https://api.notion.com/*",
+    "http://localhost:11434/*",
+    "http://127.0.0.1:11434/*"
   ],
+  "background": {
+    "scripts": ["background.js"]
+  },
   "action": {
     "default_popup": "popup.html"
   },
