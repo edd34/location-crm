@@ -79,6 +79,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       has_cave (boolean), 
       phone (phone number).
       
+
+      NB : phone number can't be 0658987329
       Text:
       ${pageText.substring(0, 4000)}`;
 
