@@ -103,7 +103,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       IMPORTANT: If the phone number found is ${userPhone || 'the user\'s personal phone number'}, DO NOT include it. Return null for phone if no other number is found.
 
       Text:
-      ${pageText.substring(0, 4000)}`;
+      ${pageText}`;
 
       // Use background script to bypass CORS
       browserAPI.runtime.sendMessage({
