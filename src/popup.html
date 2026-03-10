@@ -61,7 +61,10 @@
       </div>
       <div class="field">
         <label for="time_to_work">Time to work (min):</label>
-        <input type="number" id="time_to_work" name="time_to_work">
+        <div class="input-with-action">
+          <input type="number" id="time_to_work" name="time_to_work">
+          <button type="button" id="refresh-time" title="Refresh travel time">🔄</button>
+        </div>
       </div>
       <div class="field">
         <label for="transit_lines">Transit Lines:</label>
@@ -103,6 +106,7 @@
           <option value="Interested">Interested</option>
           <option value="Applied">Applied</option>
           <option value="Contacted">Contacted</option>
+          <option value="Planned Visit">Planned Visit</option>
           <option value="Visited">Visited</option>
           <option value="Rejected">Rejected</option>
         </select>

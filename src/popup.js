@@ -249,6 +249,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('neighborhood').addEventListener('blur', triggerRecalculate);
   document.getElementById('city').addEventListener('blur', triggerRecalculate);
   document.getElementById('postal_code').addEventListener('blur', triggerRecalculate);
+  document.getElementById('refresh-time').addEventListener('click', triggerRecalculate);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
