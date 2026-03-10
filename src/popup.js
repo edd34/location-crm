@@ -1,4 +1,5 @@
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+let existingPageId = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   const form = document.getElementById('rent-form');
@@ -10,6 +11,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const addressInput = document.getElementById('address');
   const titleInput = document.getElementById('title');
   const magicFillBtn = document.getElementById('magic-fill');
+  const addBtn = document.getElementById('add-btn');
 
   // Load Config
   const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId', 'openRouterApiKey', 'llmUrl', 'llmModel', 'userPhone', 'googleApiKey', 'workAddress']);
@@ -34,6 +36,24 @@ document.addEventListener('DOMContentLoaded', async () => {
       urlInput.value = tab.url;
       titleInput.value = tab.title;
       addressInput.value = "";
+
+      // Check if this URL already exists in Notion
+      if (savedConfig.apiKey && savedConfig.databaseId) {
+        statusDiv.textContent = 'Checking Notion...';
+        const existingPage = await fetchPageByUrl(savedConfig.apiKey, savedConfig.databaseId, tab.url);
+        if (existingPage) {
+          existingPageId = existingPage.id;
+          statusDiv.textContent = 'Found in Notion! Loading data...';
+          statusDiv.style.color = 'blue';
+          populateFormFromNotion(existingPage.properties);
+          addBtn.textContent = 'Update in Notion';
+          addBtn.classList.add('update-mode');
+          statusDiv.textContent = 'Loaded existing data.';
+          statusDiv.style.color = 'green';
+        } else {
+          statusDiv.textContent = '';
+        }
+      }
     }
   } catch (err) {
     console.error("Could not get current tab info", err);
@@ -244,30 +264,30 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    statusDiv.textContent = 'Checking if exists...';
-    statusDiv.style.color = 'blue';
-
     try {
-      const exists = await checkIfExists(apiKey, databaseId, data.url);
-      if (exists) {
-        statusDiv.textContent = 'Error: This URL already exists in Notion!';
-        statusDiv.style.color = 'red';
-        return;
+      let result;
+      if (existingPageId) {
+        statusDiv.textContent = 'Updating in Notion...';
+        statusDiv.style.color = 'blue';
+        result = await updateInNotion(apiKey, existingPageId, data);
+      } else {
+        statusDiv.textContent = 'Adding to Notion...';
+        statusDiv.style.color = 'blue';
+        result = await addToNotion(apiKey, databaseId, data);
       }
 
-      statusDiv.textContent = 'Adding to Notion...';
-      const result = await addToNotion(apiKey, databaseId, data);
-
       if (result.success) {
-        statusDiv.textContent = 'Added successfully!';
+        statusDiv.textContent = existingPageId ? 'Updated successfully!' : 'Added successfully!';
         statusDiv.style.color = 'green';
-        form.reset();
-        // Re-fill URL after reset
-        const tabs = await browserAPI.tabs.query({ active: true, currentWindow: true });
-        if (tabs[0]) {
-          urlInput.value = tabs[0].url;
-          titleInput.value = tabs[0].title;
-          addressInput.value = "";
+        if (!existingPageId) {
+          form.reset();
+          // Re-fill URL after reset
+          const tabs = await browserAPI.tabs.query({ active: true, currentWindow: true });
+          if (tabs[0]) {
+            urlInput.value = tabs[0].url;
+            titleInput.value = tabs[0].title;
+            addressInput.value = "";
+          }
         }
       } else {
         statusDiv.textContent = 'Error: ' + (result.error || 'Unknown error');
@@ -282,7 +302,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
-async function checkIfExists(apiKey, databaseId, url) {
+async function fetchPageByUrl(apiKey, databaseId, url) {
   return new Promise((resolve, reject) => {
     browserAPI.runtime.sendMessage({
       type: 'FETCH_NOTION',
@@ -299,74 +319,139 @@ async function checkIfExists(apiKey, databaseId, url) {
       }
     }, (response) => {
       if (response && response.success) {
-        resolve(response.data.results.length > 0);
+        resolve(response.data.results.length > 0 ? response.data.results[0] : null);
       } else {
-        console.error("CheckIfExists error:", response ? response.error : 'No response');
+        console.error("fetchPageByUrl error:", response ? response.error : 'No response');
         reject(new Error(response ? response.error : 'Failed to check Notion database'));
       }
     });
   });
 }
 
+function populateFormFromNotion(props) {
+  const getPropText = (p) => {
+    if (!p) return "";
+    if (p.title) return p.title.map(t => t.plain_text).join("");
+    if (p.rich_text) return p.rich_text.map(t => t.plain_text).join("");
+    return "";
+  };
+
+  const getPropNumber = (p) => (p && p.number !== undefined) ? p.number : "";
+  const getPropStatus = (p) => (p && p.status) ? p.status.name : "";
+  const getPropSelect = (p) => (p && p.select) ? p.select.name : "";
+  const getPropMultiSelect = (p) => (p && p.multi_select) ? p.multi_select.map(s => s.name).join(", ") : "";
+  const getPropPhone = (p) => (p && p.phone_number) ? p.phone_number : "";
+
+  if (props['Title']) document.getElementById('title').value = getPropText(props['Title']);
+  if (props['Address']) document.getElementById('address').value = getPropText(props['Address']);
+  if (props['City']) document.getElementById('city').value = getPropText(props['City']);
+  if (props['Postal Code']) document.getElementById('postal_code').value = getPropText(props['Postal Code']);
+  if (props['Neighborhood']) document.getElementById('neighborhood').value = getPropText(props['Neighborhood']);
+  if (props['Price']) document.getElementById('price').value = getPropNumber(props['Price']);
+  if (props['Area']) document.getElementById('area').value = getPropNumber(props['Area']);
+  if (props['Time to Work']) document.getElementById('time_to_work').value = getPropNumber(props['Time to Work']);
+  if (props['Transit Lines']) document.getElementById('transit_lines').value = getPropMultiSelect(props['Transit Lines']);
+  if (props['Agency']) document.getElementById('agency').value = getPropText(props['Agency']);
+  if (props['Agency Address']) document.getElementById('agency_address').value = getPropText(props['Agency Address']);
+  if (props['Phone']) document.getElementById('phone').value = getPropPhone(props['Phone']);
+  if (props['State']) document.getElementById('state').value = getPropStatus(props['State']);
+
+  const setTriState = (id, propName) => {
+    const status = getPropStatus(props[propName]);
+    const el = document.getElementById(id);
+    if (status === 'Yes') el.value = 'true';
+    else if (status === 'No') el.value = 'false';
+    else el.value = 'unknown';
+  };
+
+  if (props['Has Parking']) setTriState('has_parking', 'Has Parking');
+  if (props['Has Cave']) setTriState('has_cave', 'Has Cave');
+  if (props['Furnished']) setTriState('is_furnished', 'Furnished');
+}
+
+async function updateInNotion(apiKey, pageId, data) {
+  const body = {
+    properties: buildNotionProperties(data)
+  };
+
+  return new Promise((resolve) => {
+    browserAPI.runtime.sendMessage({
+      type: 'FETCH_NOTION',
+      url: `https://api.notion.com/v1/pages/${pageId}`,
+      method: 'PATCH',
+      apiKey: apiKey,
+      body: body
+    }, (response) => {
+      resolve(response);
+    });
+  });
+}
+
+function buildNotionProperties(data) {
+  return {
+    'Title': {
+      title: [{ text: { content: data.title } }]
+    },
+    'Address': {
+      rich_text: data.address ? [{ text: { content: data.address } }] : []
+    },
+    'Price': {
+      number: data.price ? parseFloat(data.price) : null
+    },
+    'Time to Work': {
+      number: data.time_to_work ? parseFloat(data.time_to_work) : null
+    },
+    'Transit Lines': {
+      multi_select: data.transit_lines ? data.transit_lines.split(',').map(line => ({ name: line.trim() })).filter(l => l.name) : []
+    },
+    'Area': {
+      number: data.area ? parseFloat(data.area) : null
+    },
+    'Has Parking': {
+      status: { name: data.has_parking === 'true' ? 'Yes' : (data.has_parking === 'false' ? 'No' : 'Unknown') }
+    },
+    'Has Cave': {
+      status: { name: data.has_cave === 'true' ? 'Yes' : (data.has_cave === 'false' ? 'No' : 'Unknown') }
+    },
+    'Furnished': {
+      status: { name: data.is_furnished === 'true' ? 'Yes' : (data.is_furnished === 'false' ? 'No' : 'Unknown') }
+    },
+    'State': {
+      status: { name: data.state }
+    },
+    'Agency': {
+      rich_text: data.agency ? [{ text: { content: data.agency } }] : []
+    },
+    'Agency Address': {
+      rich_text: data.agency_address ? [{ text: { content: data.agency_address } }] : []
+    },
+    'Phone': {
+      phone_number: data.phone || null
+    },
+    'URL': {
+      url: data.url
+    },
+    'City': {
+      rich_text: data.city ? [{ text: { content: data.city } }] : []
+    },
+    'Postal Code': {
+      rich_text: data.postal_code ? [{ text: { content: data.postal_code } }] : []
+    },
+    'Neighborhood': {
+      rich_text: data.neighborhood ? [{ text: { content: data.neighborhood } }] : []
+    }
+  };
+}
+
 async function addToNotion(apiKey, databaseId, data) {
+  const properties = buildNotionProperties(data);
+  properties['Date Added'] = {
+    date: { start: new Date().toISOString() }
+  };
+
   const body = {
     parent: { database_id: databaseId },
-    properties: {
-      'Title': {
-        title: [{ text: { content: data.title } }]
-      },
-      'Address': {
-        rich_text: data.address ? [{ text: { content: data.address } }] : []
-      },
-      'Price': {
-        number: parseFloat(data.price)
-      },
-      'Time to Work': {
-        number: data.time_to_work ? parseFloat(data.time_to_work) : null
-      },
-      'Transit Lines': {
-        multi_select: data.transit_lines ? data.transit_lines.split(',').map(line => ({ name: line.trim() })).filter(l => l.name) : []
-      },
-      'Area': {
-        number: data.area ? parseFloat(data.area) : null
-      },
-      'Has Parking': {
-        status: { name: data.has_parking === 'true' ? 'Yes' : (data.has_parking === 'false' ? 'No' : 'Unknown') }
-      },
-      'Has Cave': {
-        status: { name: data.has_cave === 'true' ? 'Yes' : (data.has_cave === 'false' ? 'No' : 'Unknown') }
-      },
-      'Furnished': {
-        status: { name: data.is_furnished === 'true' ? 'Yes' : (data.is_furnished === 'false' ? 'No' : 'Unknown') }
-      },
-      'State': {
-        status: { name: data.state }
-      },
-      'Agency': {
-        rich_text: data.agency ? [{ text: { content: data.agency } }] : []
-      },
-      'Agency Address': {
-        rich_text: data.agency_address ? [{ text: { content: data.agency_address } }] : []
-      },
-      'Phone': {
-        phone_number: data.phone || null
-      },
-      'URL': {
-        url: data.url
-      },
-      'City': {
-        rich_text: [{ text: { content: data.city } }]
-      },
-      'Postal Code': {
-        rich_text: data.postal_code ? [{ text: { content: data.postal_code } }] : []
-      },
-      'Neighborhood': {
-        rich_text: data.neighborhood ? [{ text: { content: data.neighborhood } }] : []
-      },
-      'Date Added': {
-        date: { start: new Date().toISOString() }
-      }
-    }
+    properties: properties
   };
 
   return new Promise((resolve) => {

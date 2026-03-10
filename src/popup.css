@@ -93,6 +93,14 @@ button[type="submit"]:hover {
   background-color: #0554b0;
 }
 
+button[type="submit"].update-mode {
+  background-color: #4CAF50;
+}
+
+button[type="submit"].update-mode:hover {
+  background-color: #45a049;
+}
+
 .hidden {
   display: none;
 }
