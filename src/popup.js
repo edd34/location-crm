@@ -96,6 +96,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       time_to_work (estimated travel time in minutes if mentioned, else null), 
       has_parking (boolean), 
       has_cave (boolean), 
+      is_furnished (boolean),
+      agency (name of the rental agency if mentioned, else null),
       phone (phone number).
       
       IMPORTANT: If the phone number found is ${userPhone || 'the user\'s personal phone number'}, DO NOT include it. Return null for phone if no other number is found.
@@ -140,6 +142,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (extracted.time_to_work) document.getElementById('time_to_work').value = extracted.time_to_work;
         if (extracted.has_parking !== undefined) document.getElementById('has_parking').checked = extracted.has_parking;
         if (extracted.has_cave !== undefined) document.getElementById('has_cave').checked = extracted.has_cave;
+        if (extracted.is_furnished !== undefined) document.getElementById('is_furnished').checked = extracted.is_furnished;
+        if (extracted.agency) document.getElementById('agency').value = extracted.agency;
         if (extracted.phone) document.getElementById('phone').value = extracted.phone;
 
         statusDiv.textContent = 'AI Fill complete!';
@@ -158,6 +162,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const data = Object.fromEntries(formData.entries());
     data.has_parking = document.getElementById('has_parking').checked;
     data.has_cave = document.getElementById('has_cave').checked;
+    data.is_furnished = document.getElementById('is_furnished').checked;
 
     const { apiKey, databaseId } = await browserAPI.storage.local.get(['apiKey', 'databaseId']);
 
@@ -264,8 +269,14 @@ async function addToNotion(apiKey, databaseId, data) {
       'Has Cave': {
         checkbox: data.has_cave
       },
+      'Furnished': {
+        checkbox: data.is_furnished
+      },
       'State': {
         status: { name: data.state }
+      },
+      'Agency': {
+        rich_text: data.agency ? [{ text: { content: data.agency } }] : []
       },
       'Phone': {
         phone_number: data.phone || null

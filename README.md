@@ -20,7 +20,9 @@ This extension allows you to quickly add rental property information to a Notion
         - `Area` (Type: Number)
         - `Has Parking` (Type: Checkbox)
         - `Has Cave` (Type: Checkbox)
+        - `Furnished` (Type: Checkbox)
         - `State` (Type: Status) - Recommended options: "Interested", "Contacted", "Visited", "Applied", "Rejected"
+        - `Agency` (Type: Text/Rich Text)
         - `Phone` (Type: Phone Number)
         - `URL` (Type: URL)
         - `Date Added` (Type: Date)
