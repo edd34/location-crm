@@ -10,7 +10,8 @@
   ],
   "host_permissions": [
     "https://api.notion.com/*",
-    "https://openrouter.ai/*"
+    "https://openrouter.ai/*",
+    "https://maps.googleapis.com/*"
   ],
   "background": {
     "scripts": ["background.js"]

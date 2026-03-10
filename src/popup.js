@@ -62,6 +62,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     setTimeout(() => statusDiv.textContent = '', 2000);
   });
 
+  // Check for host permissions (especially important for Firefox MV3 where they are optional)
+  const checkPermissions = async () => {
+    if (typeof browser !== 'undefined' && browser.permissions) {
+      const hasPermissions = await browser.permissions.contains({
+        origins: ['https://maps.googleapis.com/*', 'https://api.notion.com/*']
+      });
+      if (!hasPermissions) {
+        statusDiv.textContent = 'Note: Please enable host permissions in extension settings for Maps/Notion to work.';
+        statusDiv.style.color = 'orange';
+        setTimeout(() => { if (statusDiv.style.color === 'orange') statusDiv.textContent = ''; }, 5000);
+      }
+    }
+  };
+  checkPermissions();
+
   magicFillBtn.addEventListener('click', async () => {
     const { openRouterApiKey, llmUrl, llmModel, userPhone, googleApiKey, workAddress } = await browserAPI.storage.local.get(['openRouterApiKey', 'llmUrl', 'llmModel', 'userPhone', 'googleApiKey', 'workAddress']);
     const url = llmUrl || 'https://openrouter.ai/api/v1/chat/completions';
@@ -96,20 +111,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       statusDiv.textContent = 'AI is thinking...';
       const prompt = `Extract rental property information from this webpage text. Return ONLY a JSON object with these keys: 
       title (short descriptive title), 
-      address (full address if found), 
-      city (city only), 
-      postal_code (postal code if found),
-      neighborhood (neighborhood or district if found),
+      address (full address of the RENTAL PROPERTY if found), 
+      city (city of the RENTAL PROPERTY only), 
+      postal_code (postal code of the RENTAL PROPERTY if found),
+      neighborhood (neighborhood or district of the RENTAL PROPERTY if found),
       price (number only), 
       area (number only, in m2), 
       time_to_work (estimated travel time in minutes if mentioned, else null), 
-      has_parking (boolean), 
-      has_cave (boolean), 
-      is_furnished (boolean),
+      has_parking (boolean OR the string 'unknown'), 
+      has_cave (boolean OR the string 'unknown'), 
+      is_furnished (boolean OR the string 'unknown'),
       agency (name of the rental agency if mentioned, else null),
+      agency_address (full address of the RENTAL AGENCY if found, else null),
       phone (phone number).
       
-      IMPORTANT: If the phone number found is ${userPhone || 'the user\'s personal phone number'}, DO NOT include it. Return null for phone if no other number is found.
+      IMPORTANT: 
+      - Distinguish clearly between the RENTAL PROPERTY address and the RENTAL AGENCY address. 
+      - The 'address' field should NEVER contain the address of the agency.
+      - For has_parking, has_cave, and is_furnished: return true, false, or 'unknown'. Only return true/false if it is explicitly stated or very clear.
+      - If the phone number found is ${userPhone || 'the user\'s personal phone number'}, DO NOT include it. Return null for phone if no other number is found.
 
       Text:
       ${pageText}`;
@@ -151,13 +171,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (extracted.price) document.getElementById('price').value = parseInt(extracted.price);
         if (extracted.area) document.getElementById('area').value = parseInt(extracted.area);
         if (extracted.time_to_work) document.getElementById('time_to_work').value = extracted.time_to_work;
-        if (extracted.has_parking !== undefined) document.getElementById('has_parking').checked = extracted.has_parking;
-        if (extracted.has_cave !== undefined) document.getElementById('has_cave').checked = extracted.has_cave;
-        if (extracted.is_furnished !== undefined) document.getElementById('is_furnished').checked = extracted.is_furnished;
+        
+        // Handle Tri-state selects
+        const setTriState = (id, val) => {
+          const el = document.getElementById(id);
+          if (val === true) el.value = 'true';
+          else if (val === false) el.value = 'false';
+          else el.value = 'unknown';
+        };
+        setTriState('has_parking', extracted.has_parking);
+        setTriState('has_cave', extracted.has_cave);
+        setTriState('is_furnished', extracted.is_furnished);
+
         if (extracted.agency) document.getElementById('agency').value = extracted.agency;
+        if (extracted.agency_address) document.getElementById('agency_address').value = extracted.agency_address;
         if (extracted.phone) document.getElementById('phone').value = extracted.phone;
 
-        // Auto-calculate time to work if address is found
+  // Auto-calculate time to work if address is found
         if ((extracted.address || (extracted.city && extracted.postal_code)) && googleApiKey && workAddress) {
           const origin = extracted.address || `${extracted.city} ${extracted.postal_code}`;
           calculateTimeToWork(googleApiKey, origin, workAddress);
@@ -173,13 +203,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Manual Recalculate Time to Work on address/city/postal blur
+  const triggerRecalculate = async () => {
+    const { googleApiKey, workAddress } = await browserAPI.storage.local.get(['googleApiKey', 'workAddress']);
+    const city = document.getElementById('city').value.trim();
+    const postalCode = document.getElementById('postal_code').value.trim();
+    const address = addressInput.value.trim();
+    
+    const origin = address || (city ? `${city}${postalCode ? ' ' + postalCode : ''}` : '');
+    
+    if (origin && googleApiKey && workAddress) {
+      calculateTimeToWork(googleApiKey, origin, workAddress);
+    }
+  };
+
+  addressInput.addEventListener('blur', triggerRecalculate);
+  document.getElementById('city').addEventListener('blur', triggerRecalculate);
+  document.getElementById('postal_code').addEventListener('blur', triggerRecalculate);
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
-    data.has_parking = document.getElementById('has_parking').checked;
-    data.has_cave = document.getElementById('has_cave').checked;
-    data.is_furnished = document.getElementById('is_furnished').checked;
 
     const { apiKey, databaseId } = await browserAPI.storage.local.get(['apiKey', 'databaseId']);
 
@@ -202,9 +247,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       statusDiv.textContent = 'Adding to Notion...';
-      const response = await addToNotion(apiKey, databaseId, data);
+      const result = await addToNotion(apiKey, databaseId, data);
 
-      if (response.ok) {
+      if (result.success) {
         statusDiv.textContent = 'Added successfully!';
         statusDiv.style.color = 'green';
         form.reset();
@@ -216,10 +261,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           addressInput.value = "";
         }
       } else {
-        const errData = await response.json();
-        statusDiv.textContent = 'Error: ' + (errData.message || 'Check database property names');
+        statusDiv.textContent = 'Error: ' + (result.error || 'Unknown error');
         statusDiv.style.color = 'red';
-        console.error("Notion API Error:", errData);
+        console.error("Notion API Error:", result.error);
       }
     } catch (error) {
       statusDiv.textContent = 'Error: ' + error.message;
@@ -230,35 +274,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function checkIfExists(apiKey, databaseId, url) {
-  try {
-    const response = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
+  return new Promise((resolve, reject) => {
+    browserAPI.runtime.sendMessage({
+      type: 'FETCH_NOTION',
+      url: `https://api.notion.com/v1/databases/${databaseId}/query`,
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Notion-Version': '2022-06-28',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
+      apiKey: apiKey,
+      body: {
         filter: {
           property: 'URL',
           url: {
             equals: url
           }
         }
-      })
+      }
+    }, (response) => {
+      if (response && response.success) {
+        resolve(response.data.results.length > 0);
+      } else {
+        console.error("CheckIfExists error:", response ? response.error : 'No response');
+        reject(new Error(response ? response.error : 'Failed to check Notion database'));
+      }
     });
-
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error('Query failed: ' + err.message);
-    }
-
-    const result = await response.json();
-    return result.results.length > 0;
-  } catch (error) {
-    console.error("CheckIfExists error:", error);
-    throw error;
-  }
+  });
 }
 
 async function addToNotion(apiKey, databaseId, data) {
@@ -281,19 +319,22 @@ async function addToNotion(apiKey, databaseId, data) {
         number: data.area ? parseFloat(data.area) : null
       },
       'Has Parking': {
-        checkbox: data.has_parking
+        status: { name: data.has_parking === 'true' ? 'Yes' : (data.has_parking === 'false' ? 'No' : 'Unknown') }
       },
       'Has Cave': {
-        checkbox: data.has_cave
+        status: { name: data.has_cave === 'true' ? 'Yes' : (data.has_cave === 'false' ? 'No' : 'Unknown') }
       },
       'Furnished': {
-        checkbox: data.is_furnished
+        status: { name: data.is_furnished === 'true' ? 'Yes' : (data.is_furnished === 'false' ? 'No' : 'Unknown') }
       },
       'State': {
         status: { name: data.state }
       },
       'Agency': {
         rich_text: data.agency ? [{ text: { content: data.agency } }] : []
+      },
+      'Agency Address': {
+        rich_text: data.agency_address ? [{ text: { content: data.agency_address } }] : []
       },
       'Phone': {
         phone_number: data.phone || null
@@ -316,45 +357,58 @@ async function addToNotion(apiKey, databaseId, data) {
     }
   };
 
-  return await fetch('https://api.notion.com/v1/pages', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Notion-Version': '2022-06-28',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(body)
+  return new Promise((resolve) => {
+    browserAPI.runtime.sendMessage({
+      type: 'FETCH_NOTION',
+      url: 'https://api.notion.com/v1/pages',
+      method: 'POST',
+      apiKey: apiKey,
+      body: body
+    }, (response) => {
+      resolve(response);
+    });
   });
 }
+
 
 async function calculateTimeToWork(apiKey, origin, destination) {
   const statusDiv = document.getElementById('status');
   statusDiv.textContent = 'Calculating travel time...';
 
-  // Target: Tuesday, April 1, 2025 at 09:00:00 AM (local time)
-  // Using a Tuesday to avoid weekends and choosing a common workday
-  const arrivalTime = Math.floor(new Date('2025-04-01T09:00:00').getTime() / 1000);
+  // Find next Tuesday morning at 9am to avoid weekends and get consistent transit times
+  const nextTuesday = new Date();
+  nextTuesday.setDate(nextTuesday.getDate() + (7 - nextTuesday.getDay() + 2) % 7);
+  nextTuesday.setHours(9, 0, 0, 0);
+  
+  // If next Tuesday is already today or in the past (e.g., it's already past 9am Tuesday), move to the following week
+  if (nextTuesday <= new Date()) {
+    nextTuesday.setDate(nextTuesday.getDate() + 7);
+  }
 
+  const arrivalTime = Math.floor(nextTuesday.getTime() / 1000);
   const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destination)}&arrival_time=${arrivalTime}&mode=transit&key=${apiKey}`;
 
-  try {
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.status === 'OK' && data.rows[0].elements[0].status === 'OK') {
-      const duration = data.rows[0].elements[0].duration.value; // duration in seconds
-      const minutes = Math.round(duration / 60);
-      document.getElementById('time_to_work').value = minutes;
-      statusDiv.textContent = `AI Fill + Travel Time: ${minutes} min (Transit)`;
-      statusDiv.style.color = 'green';
+  browserAPI.runtime.sendMessage({
+    type: 'FETCH_MAPS',
+    url: url
+  }, (response) => {
+    if (response && response.success) {
+      const data = response.data;
+      if (data.status === 'OK' && data.rows[0].elements[0].status === 'OK') {
+        const duration = data.rows[0].elements[0].duration.value; 
+        const minutes = Math.round(duration / 60);
+        document.getElementById('time_to_work').value = minutes;
+        statusDiv.textContent = `AI Fill + Travel Time: ${minutes} min (Transit)`;
+        statusDiv.style.color = 'green';
+      } else {
+        console.error('Google Maps Error:', data);
+        statusDiv.textContent = 'Maps calculation failed. Check API key/Address.';
+        statusDiv.style.color = 'orange';
+      }
     } else {
-      console.error('Google Maps Error:', data);
-      statusDiv.textContent = 'Maps calculation failed. Check API key/Address.';
-      statusDiv.style.color = 'orange';
+      console.error('Error fetching Distance Matrix via background:', response ? response.error : 'No response');
+      statusDiv.textContent = 'Error calculating distance.';
+      statusDiv.style.color = 'red';
     }
-  } catch (error) {
-    console.error('Error fetching Distance Matrix:', error);
-    statusDiv.textContent = 'Error calculating distance.';
-    statusDiv.style.color = 'red';
-  }
+  });
 }

@@ -62,17 +62,20 @@ input, select {
   border-radius: 4px;
 }
 
-.checkbox-group {
+.tri-state-group {
   display: flex;
-  gap: 15px;
+  justify-content: space-between;
+  gap: 10px;
   margin: 10px 0;
-  font-size: 14px;
 }
 
-.checkbox-group label {
-  display: flex;
-  align-items: center;
-  font-weight: 400;
+.tri-state-group .field {
+  flex: 1;
+}
+
+.tri-state-group select {
+  width: 100%;
+  padding: 4px;
 }
 
 button[type="submit"] {

@@ -67,10 +67,31 @@
         <label for="area">Area (m²):</label>
         <input type="number" id="area" name="area">
       </div>
-      <div class="checkbox-group">
-        <label><input type="checkbox" id="has_parking" name="has_parking"> Has Parking</label>
-        <label><input type="checkbox" id="has_cave" name="has_cave"> Has Cave</label>
-        <label><input type="checkbox" id="is_furnished" name="is_furnished"> Furnished</label>
+      <div class="tri-state-group">
+        <div class="field">
+          <label for="has_parking">Parking:</label>
+          <select id="has_parking" name="has_parking">
+            <option value="unknown">?</option>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="has_cave">Cave:</label>
+          <select id="has_cave" name="has_cave">
+            <option value="unknown">?</option>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="is_furnished">Furnished:</label>
+          <select id="is_furnished" name="is_furnished">
+            <option value="unknown">?</option>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </div>
       </div>
       <div class="field">
         <label for="state">State:</label>
@@ -85,6 +106,10 @@
       <div class="field">
         <label for="agency">Agency:</label>
         <input type="text" id="agency" name="agency">
+      </div>
+      <div class="field">
+        <label for="agency_address">Agency Address:</label>
+        <input type="text" id="agency_address" name="agency_address">
       </div>
       <div class="field">
         <label for="phone">Phone Number:</label>

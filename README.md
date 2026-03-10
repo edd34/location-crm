@@ -20,11 +20,12 @@ This extension allows you to quickly add rental property information to a Notion
         - `Neighborhood` (Type: Text/Rich Text)
         - `Time to Work` (Type: Number)
         - `Area` (Type: Number)
-        - `Has Parking` (Type: Checkbox)
-        - `Has Cave` (Type: Checkbox)
-        - `Furnished` (Type: Checkbox)
+        - `Has Parking` (Type: Status) - Options: "Yes", "No", "Unknown"
+        - `Has Cave` (Type: Status) - Options: "Yes", "No", "Unknown"
+        - `Furnished` (Type: Status) - Options: "Yes", "No", "Unknown"
         - `State` (Type: Status) - Recommended options: "Interested", "Contacted", "Visited", "Applied", "Rejected"
         - `Agency` (Type: Text/Rich Text)
+        - `Agency Address` (Type: Text/Rich Text)
         - `Phone` (Type: Phone Number)
         - `URL` (Type: URL)
         - `Date Added` (Type: Date)
@@ -49,3 +50,23 @@ This extension allows you to quickly add rental property information to a Notion
 4.  Navigate to this project's `src` folder and select `manifest.json`.
 5.  The extension should now appear in your extensions list.
 6.  Click the extension icon, go to Settings (gear icon), and enter your **Notion API Key** and **Database ID**.
+
+## Permissions (CRITICAL for Firefox)
+
+In Firefox Manifest V3, host permissions are **optional by default**. To avoid "Cross-Origin Request Blocked" (CORS) errors, you **must** manually enable them:
+
+1.  Go to `about:addons` in Firefox.
+2.  Find **Notion Rent Tracker** and click on it.
+3.  Go to the **Permissions** tab.
+4.  Toggle **ON** the permissions for:
+    - `https://api.notion.com/*`
+    - `https://maps.googleapis.com/*`
+    - `https://openrouter.ai/*`
+
+## Architecture: CORS & Background Fetching
+
+To comply with modern browser security and avoid CORS issues, this extension uses a **Background Script** architecture:
+- All external API calls (Notion, Google Maps, OpenRouter) are routed through `src/background.js`.
+- The popup sends a message to the background script using `browser.runtime.sendMessage`.
+- The background script performs the `fetch` from a privileged context and returns the data.
+- This bypasses CORS restrictions that would otherwise block direct requests from the extension popup.
