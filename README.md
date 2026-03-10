@@ -19,6 +19,7 @@ This extension allows you to quickly add rental property information to a Notion
         - `Postal Code` (Type: Text/Rich Text)
         - `Neighborhood` (Type: Text/Rich Text)
         - `Time to Work` (Type: Number)
+        - `Transit Lines` (Type: Multi-select)
         - `Area` (Type: Number)
         - `Has Parking` (Type: Status) - Options: "Yes", "No", "Unknown"
         - `Has Cave` (Type: Status) - Options: "Yes", "No", "Unknown"

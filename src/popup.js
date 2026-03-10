@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       is_furnished (boolean OR the string 'unknown'),
       agency (name of the rental agency if mentioned, else null),
       agency_address (full address of the RENTAL AGENCY if found, else null),
-      phone (phone number).
+      phone (phone number of the rental agency).
       
       IMPORTANT: 
       - Distinguish clearly between the RENTAL PROPERTY address and the RENTAL AGENCY address. 
@@ -187,9 +187,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (extracted.agency_address) document.getElementById('agency_address').value = extracted.agency_address;
         if (extracted.phone) document.getElementById('phone').value = extracted.phone;
 
-  // Auto-calculate time to work if address is found
-        if ((extracted.address || (extracted.city && extracted.postal_code)) && googleApiKey && workAddress) {
-          const origin = extracted.address || `${extracted.city} ${extracted.postal_code}`;
+  // Auto-calculate time to work if enough info is found
+        if ((extracted.address || extracted.city) && googleApiKey && workAddress) {
+          const parts = [
+            extracted.address,
+            extracted.neighborhood,
+            extracted.city,
+            extracted.postal_code
+          ].filter(Boolean);
+          const origin = parts.join(', ');
           calculateTimeToWork(googleApiKey, origin, workAddress);
         } else {
           statusDiv.textContent = 'AI Fill complete!';
@@ -206,11 +212,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Manual Recalculate Time to Work on address/city/postal blur
   const triggerRecalculate = async () => {
     const { googleApiKey, workAddress } = await browserAPI.storage.local.get(['googleApiKey', 'workAddress']);
+    const address = addressInput.value.trim();
+    const neighborhood = document.getElementById('neighborhood').value.trim();
     const city = document.getElementById('city').value.trim();
     const postalCode = document.getElementById('postal_code').value.trim();
-    const address = addressInput.value.trim();
     
-    const origin = address || (city ? `${city}${postalCode ? ' ' + postalCode : ''}` : '');
+    const parts = [address, neighborhood, city, postalCode].filter(Boolean);
+    const origin = parts.join(', ');
     
     if (origin && googleApiKey && workAddress) {
       calculateTimeToWork(googleApiKey, origin, workAddress);
@@ -218,6 +226,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   addressInput.addEventListener('blur', triggerRecalculate);
+  document.getElementById('neighborhood').addEventListener('blur', triggerRecalculate);
   document.getElementById('city').addEventListener('blur', triggerRecalculate);
   document.getElementById('postal_code').addEventListener('blur', triggerRecalculate);
 
@@ -315,6 +324,9 @@ async function addToNotion(apiKey, databaseId, data) {
       'Time to Work': {
         number: data.time_to_work ? parseFloat(data.time_to_work) : null
       },
+      'Transit Lines': {
+        multi_select: data.transit_lines ? data.transit_lines.split(',').map(line => ({ name: line.trim() })).filter(l => l.name) : []
+      },
       'Area': {
         number: data.area ? parseFloat(data.area) : null
       },
@@ -386,7 +398,9 @@ async function calculateTimeToWork(apiKey, origin, destination) {
   }
 
   const arrivalTime = Math.floor(nextTuesday.getTime() / 1000);
-  const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destination)}&arrival_time=${arrivalTime}&mode=transit&key=${apiKey}`;
+  // Using Directions API instead of Distance Matrix to get transit details (line names)
+  // Added &language=fr to get vehicle names (Métro, Bus, etc.) in French
+  const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&arrival_time=${arrivalTime}&mode=transit&language=fr&key=${apiKey}`;
 
   browserAPI.runtime.sendMessage({
     type: 'FETCH_MAPS',
@@ -394,11 +408,39 @@ async function calculateTimeToWork(apiKey, origin, destination) {
   }, (response) => {
     if (response && response.success) {
       const data = response.data;
-      if (data.status === 'OK' && data.rows[0].elements[0].status === 'OK') {
-        const duration = data.rows[0].elements[0].duration.value; 
+      if (data.status === 'OK' && data.routes.length > 0) {
+        const route = data.routes[0];
+        const leg = route.legs[0];
+        
+        // Duration
+        const duration = leg.duration.value; 
         const minutes = Math.round(duration / 60);
         document.getElementById('time_to_work').value = minutes;
-        statusDiv.textContent = `AI Fill + Travel Time: ${minutes} min (Transit)`;
+
+        // Extract Transit Lines
+        const transitLines = [];
+        leg.steps.forEach(step => {
+          if (step.travel_mode === 'TRANSIT' && step.transit_details) {
+            const line = step.transit_details.line;
+            const vehicleName = line.vehicle ? line.vehicle.name : '';
+            const shortName = line.short_name || line.name;
+            
+            // Format as "Vehicle ShortName" (e.g., "Bus 123", "Métro 1", "RER A")
+            let fullName = shortName;
+            if (vehicleName && shortName && !shortName.toLowerCase().includes(vehicleName.toLowerCase())) {
+              fullName = `${vehicleName} ${shortName}`;
+            } else if (vehicleName && !shortName) {
+              fullName = vehicleName;
+            }
+            
+            if (fullName) transitLines.push(fullName);
+          }
+        });
+        
+        const transitLinesStr = transitLines.join(', ');
+        document.getElementById('transit_lines').value = transitLinesStr;
+
+        statusDiv.textContent = `AI Fill + Travel Time: ${minutes} min (${transitLinesStr || 'Transit'})`;
         statusDiv.style.color = 'green';
       } else {
         console.error('Google Maps Error:', data);
@@ -406,7 +448,7 @@ async function calculateTimeToWork(apiKey, origin, destination) {
         statusDiv.style.color = 'orange';
       }
     } else {
-      console.error('Error fetching Distance Matrix via background:', response ? response.error : 'No response');
+      console.error('Error fetching Directions via background:', response ? response.error : 'No response');
       statusDiv.textContent = 'Error calculating distance.';
       statusDiv.style.color = 'red';
     }
