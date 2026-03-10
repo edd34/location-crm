@@ -1,19 +1,23 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="UTF-8">
   <title>Notion Rent Tracker</title>
   <link rel="stylesheet" href="popup.css">
 </head>
+
 <body>
   <div id="config-section" class="hidden">
     <h3>Notion Config</h3>
     <input type="password" id="api-key" placeholder="Notion API Key">
     <input type="text" id="database-id" placeholder="Database ID">
     <hr>
-    <h3>LLM Config (Ollama)</h3>
-    <input type="text" id="llm-url" placeholder="LLM URL (http://localhost:11434/api/generate)" value="http://localhost:11434/api/generate">
-    <input type="text" id="llm-model" placeholder="Model (e.g., llama3)" value="llama3">
+    <h3>LLM Config (OpenRouter)</h3>
+    <input type="password" id="openrouter-api-key" placeholder="OpenRouter API Key">
+    <input type="text" id="llm-url" placeholder="LLM URL" value="https://openrouter.ai/api/v1/chat/completions">
+    <input type="text" id="llm-model" placeholder="Model (e.g., google/gemini-flash-1.5-8b)"
+      value="google/gemini-flash-1.5-8b">
     <input type="text" id="user-phone" placeholder="My Phone Number (to ignore)">
     <button id="save-config">Save Config</button>
   </div>
@@ -59,9 +63,9 @@
         <label for="state">State:</label>
         <select id="state" name="state">
           <option value="Interested">Interested</option>
+          <option value="Applied">Applied</option>
           <option value="Contacted">Contacted</option>
           <option value="Visited">Visited</option>
-          <option value="Applied">Applied</option>
           <option value="Rejected">Rejected</option>
         </select>
       </div>
@@ -80,4 +84,5 @@
 
   <script src="popup.js"></script>
 </body>
+
 </html>

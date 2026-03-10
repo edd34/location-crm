@@ -6,7 +6,12 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Perform the fetch in the background script context
     fetch(message.url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${message.openRouterApiKey}`,
+        'HTTP-Referer': 'https://github.com/location-crm', // Optional but recommended by OpenRouter
+        'X-Title': 'Location CRM Extension' // Optional but recommended by OpenRouter
+      },
       body: JSON.stringify(message.body)
     })
       .then(async response => {
@@ -15,11 +20,11 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
           let errorMsg = `HTTP ${response.status}`;
           try {
             const errJson = JSON.parse(errText);
-            errorMsg = errJson.error || errorMsg;
+            errorMsg = errJson.error?.message || errJson.error || errorMsg;
           } catch (e) {
             errorMsg = errText || errorMsg;
           }
-          throw new Error('Ollama Error: ' + errorMsg);
+          throw new Error('LLM Error: ' + errorMsg);
         }
         return response.json();
       })

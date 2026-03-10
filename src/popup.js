@@ -12,9 +12,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const magicFillBtn = document.getElementById('magic-fill');
 
   // Load Config
-  const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId', 'llmUrl', 'llmModel', 'userPhone']);
+  const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId', 'openRouterApiKey', 'llmUrl', 'llmModel', 'userPhone']);
   if (savedConfig.apiKey) document.getElementById('api-key').value = savedConfig.apiKey;
   if (savedConfig.databaseId) document.getElementById('database-id').value = savedConfig.databaseId;
+  if (savedConfig.openRouterApiKey) document.getElementById('openrouter-api-key').value = savedConfig.openRouterApiKey;
   if (savedConfig.llmUrl) document.getElementById('llm-url').value = savedConfig.llmUrl;
   if (savedConfig.llmModel) document.getElementById('llm-model').value = savedConfig.llmModel;
   if (savedConfig.userPhone) document.getElementById('user-phone').value = savedConfig.userPhone;
@@ -43,10 +44,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   saveConfigBtn.addEventListener('click', async () => {
     const apiKey = document.getElementById('api-key').value.trim();
     const databaseId = document.getElementById('database-id').value.trim();
+    const openRouterApiKey = document.getElementById('openrouter-api-key').value.trim();
     const llmUrl = document.getElementById('llm-url').value.trim();
     const llmModel = document.getElementById('llm-model').value.trim();
     const userPhone = document.getElementById('user-phone').value.trim();
-    await browserAPI.storage.local.set({ apiKey, databaseId, llmUrl, llmModel, userPhone });
+    await browserAPI.storage.local.set({ apiKey, databaseId, openRouterApiKey, llmUrl, llmModel, userPhone });
     statusDiv.textContent = 'Config saved!';
     statusDiv.style.color = 'green';
     configSection.classList.add('hidden');
@@ -54,9 +56,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   magicFillBtn.addEventListener('click', async () => {
-    const { llmUrl, llmModel, userPhone } = await browserAPI.storage.local.get(['llmUrl', 'llmModel', 'userPhone']);
-    const url = llmUrl || 'http://localhost:11434/api/generate';
-    const model = llmModel || 'hf.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF:F16';
+    const { openRouterApiKey, llmUrl, llmModel, userPhone } = await browserAPI.storage.local.get(['openRouterApiKey', 'llmUrl', 'llmModel', 'userPhone']);
+    const url = llmUrl || 'https://openrouter.ai/api/v1/chat/completions';
+    const model = llmModel || 'google/gemini-flash-1.5-8b';
+
+    if (!openRouterApiKey) {
+      statusDiv.textContent = 'Please configure OpenRouter API Key first!';
+      statusDiv.style.color = 'red';
+      configSection.classList.remove('hidden');
+      return;
+    }
 
     statusDiv.textContent = 'Extracting page content...';
     statusDiv.style.color = 'blue';
@@ -98,11 +107,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       browserAPI.runtime.sendMessage({
         type: 'FETCH_LLM',
         url: url,
+        openRouterApiKey: openRouterApiKey,
         body: {
           model: model,
-          prompt: prompt,
-          stream: false,
-          format: 'json'
+          messages: [{ role: 'user', content: prompt }],
+          response_format: { type: 'json_object' }
         }
       }, (response) => {
         if (!response || !response.success) {
@@ -111,14 +120,23 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         }
 
-        const extracted = JSON.parse(response.data.response);
+        let extracted;
+        try {
+          const content = response.data.choices[0].message.content;
+          extracted = JSON.parse(content);
+        } catch (e) {
+          statusDiv.textContent = 'Error parsing AI response';
+          statusDiv.style.color = 'red';
+          console.error("AI Response Parse Error:", e, response.data);
+          return;
+        }
 
         // Fill form
         if (extracted.title) titleInput.value = extracted.title;
         if (extracted.address) addressInput.value = extracted.address;
         if (extracted.city) document.getElementById('city').value = extracted.city;
-        if (extracted.price) document.getElementById('price').value = extracted.price;
-        if (extracted.area) document.getElementById('area').value = extracted.area;
+        if (extracted.price) document.getElementById('price').value = parseInt(extracted.price);
+        if (extracted.area) document.getElementById('area').value = parseInt(extracted.area);
         if (extracted.time_to_work) document.getElementById('time_to_work').value = extracted.time_to_work;
         if (extracted.has_parking !== undefined) document.getElementById('has_parking').checked = extracted.has_parking;
         if (extracted.has_cave !== undefined) document.getElementById('has_cave').checked = extracted.has_cave;
