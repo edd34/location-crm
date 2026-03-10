@@ -12,13 +12,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   const magicFillBtn = document.getElementById('magic-fill');
 
   // Load Config
-  const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId', 'openRouterApiKey', 'llmUrl', 'llmModel', 'userPhone']);
+  const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId', 'openRouterApiKey', 'llmUrl', 'llmModel', 'userPhone', 'googleApiKey', 'workAddress']);
   if (savedConfig.apiKey) document.getElementById('api-key').value = savedConfig.apiKey;
   if (savedConfig.databaseId) document.getElementById('database-id').value = savedConfig.databaseId;
   if (savedConfig.openRouterApiKey) document.getElementById('openrouter-api-key').value = savedConfig.openRouterApiKey;
   if (savedConfig.llmUrl) document.getElementById('llm-url').value = savedConfig.llmUrl;
   if (savedConfig.llmModel) document.getElementById('llm-model').value = savedConfig.llmModel;
   if (savedConfig.userPhone) document.getElementById('user-phone').value = savedConfig.userPhone;
+  if (savedConfig.googleApiKey) document.getElementById('google-api-key').value = savedConfig.googleApiKey;
+  if (savedConfig.workAddress) document.getElementById('work-address').value = savedConfig.workAddress;
 
   if (!savedConfig.apiKey || !savedConfig.databaseId) {
     configSection.classList.remove('hidden');
@@ -48,7 +50,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const llmUrl = document.getElementById('llm-url').value.trim();
     const llmModel = document.getElementById('llm-model').value.trim();
     const userPhone = document.getElementById('user-phone').value.trim();
-    await browserAPI.storage.local.set({ apiKey, databaseId, openRouterApiKey, llmUrl, llmModel, userPhone });
+    const googleApiKey = document.getElementById('google-api-key').value.trim();
+    const workAddress = document.getElementById('work-address').value.trim();
+
+    await browserAPI.storage.local.set({ 
+      apiKey, databaseId, openRouterApiKey, llmUrl, llmModel, userPhone, googleApiKey, workAddress 
+    });
     statusDiv.textContent = 'Config saved!';
     statusDiv.style.color = 'green';
     configSection.classList.add('hidden');
@@ -56,7 +63,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   magicFillBtn.addEventListener('click', async () => {
-    const { openRouterApiKey, llmUrl, llmModel, userPhone } = await browserAPI.storage.local.get(['openRouterApiKey', 'llmUrl', 'llmModel', 'userPhone']);
+    const { openRouterApiKey, llmUrl, llmModel, userPhone, googleApiKey, workAddress } = await browserAPI.storage.local.get(['openRouterApiKey', 'llmUrl', 'llmModel', 'userPhone', 'googleApiKey', 'workAddress']);
     const url = llmUrl || 'https://openrouter.ai/api/v1/chat/completions';
     const model = llmModel || 'google/gemini-flash-1.5-8b';
 
@@ -150,8 +157,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (extracted.agency) document.getElementById('agency').value = extracted.agency;
         if (extracted.phone) document.getElementById('phone').value = extracted.phone;
 
-        statusDiv.textContent = 'AI Fill complete!';
-        statusDiv.style.color = 'green';
+        // Auto-calculate time to work if address is found
+        if ((extracted.address || (extracted.city && extracted.postal_code)) && googleApiKey && workAddress) {
+          const origin = extracted.address || `${extracted.city} ${extracted.postal_code}`;
+          calculateTimeToWork(googleApiKey, origin, workAddress);
+        } else {
+          statusDiv.textContent = 'AI Fill complete!';
+          statusDiv.style.color = 'green';
+        }
       });
     } catch (error) {
       statusDiv.textContent = 'AI Fill Error: ' + error.message;
@@ -312,4 +325,36 @@ async function addToNotion(apiKey, databaseId, data) {
     },
     body: JSON.stringify(body)
   });
+}
+
+async function calculateTimeToWork(apiKey, origin, destination) {
+  const statusDiv = document.getElementById('status');
+  statusDiv.textContent = 'Calculating travel time...';
+
+  // Target: Tuesday, April 1, 2025 at 09:00:00 AM (local time)
+  // Using a Tuesday to avoid weekends and choosing a common workday
+  const arrivalTime = Math.floor(new Date('2025-04-01T09:00:00').getTime() / 1000);
+
+  const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destination)}&arrival_time=${arrivalTime}&mode=transit&key=${apiKey}`;
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status === 'OK' && data.rows[0].elements[0].status === 'OK') {
+      const duration = data.rows[0].elements[0].duration.value; // duration in seconds
+      const minutes = Math.round(duration / 60);
+      document.getElementById('time_to_work').value = minutes;
+      statusDiv.textContent = `AI Fill + Travel Time: ${minutes} min (Transit)`;
+      statusDiv.style.color = 'green';
+    } else {
+      console.error('Google Maps Error:', data);
+      statusDiv.textContent = 'Maps calculation failed. Check API key/Address.';
+      statusDiv.style.color = 'orange';
+    }
+  } catch (error) {
+    console.error('Error fetching Distance Matrix:', error);
+    statusDiv.textContent = 'Error calculating distance.';
+    statusDiv.style.color = 'red';
+  }
 }
