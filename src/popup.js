@@ -91,6 +91,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       title (short descriptive title), 
       address (full address if found), 
       city (city only), 
+      postal_code (postal code if found),
+      neighborhood (neighborhood or district if found),
       price (number only), 
       area (number only, in m2), 
       time_to_work (estimated travel time in minutes if mentioned, else null), 
@@ -137,6 +139,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (extracted.title) titleInput.value = extracted.title;
         if (extracted.address) addressInput.value = extracted.address;
         if (extracted.city) document.getElementById('city').value = extracted.city;
+        if (extracted.postal_code) document.getElementById('postal_code').value = extracted.postal_code;
+        if (extracted.neighborhood) document.getElementById('neighborhood').value = extracted.neighborhood;
         if (extracted.price) document.getElementById('price').value = parseInt(extracted.price);
         if (extracted.area) document.getElementById('area').value = parseInt(extracted.area);
         if (extracted.time_to_work) document.getElementById('time_to_work').value = extracted.time_to_work;
@@ -286,6 +290,12 @@ async function addToNotion(apiKey, databaseId, data) {
       },
       'City': {
         rich_text: [{ text: { content: data.city } }]
+      },
+      'Postal Code': {
+        rich_text: data.postal_code ? [{ text: { content: data.postal_code } }] : []
+      },
+      'Neighborhood': {
+        rich_text: data.neighborhood ? [{ text: { content: data.neighborhood } }] : []
       },
       'Date Added': {
         date: { start: new Date().toISOString() }
