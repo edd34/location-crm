@@ -44,6 +44,23 @@ async function handleMessage(message, sendResponse) {
       const data = await response.json();
       sendResponse({ success: true, data });
     }
+    else if (message.type === 'FETCH_OVERPASS') {
+      const response = await fetch(message.url, {
+        method: 'POST',
+        body: message.body,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error('Overpass Error: ' + errText);
+      }
+
+      const data = await response.json();
+      sendResponse({ success: true, data });
+    }
     else if (message.type === 'FETCH_NOTION') {
       const response = await fetch(message.url, {
         method: message.method || 'GET',

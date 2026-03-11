@@ -136,6 +136,56 @@ button[type="submit"].update-mode:hover {
   text-align: center;
 }
 
+#neighborhood-results {
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+  margin-bottom: 15px;
+}
+
+#neighborhood-results.hidden {
+  display: none;
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+}
+
+.result-item .icon {
+  margin-right: 5px;
+  font-size: 14px;
+}
+
+.result-item span[id^="count-"] {
+  font-weight: bold;
+  margin-left: 3px;
+}
+
+#analyze-neighborhood {
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+#analyze-neighborhood:hover {
+  background-color: #f0f0f0;
+}
+
 #config-section {
   display: flex;
   flex-direction: column;

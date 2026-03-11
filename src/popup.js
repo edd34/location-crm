@@ -251,10 +251,50 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('postal_code').addEventListener('blur', triggerRecalculate);
   document.getElementById('refresh-time').addEventListener('click', triggerRecalculate);
 
+  document.getElementById('analyze-neighborhood').addEventListener('click', async () => {
+    const address = addressInput.value.trim();
+    const city = document.getElementById('city').value.trim();
+    const postalCode = document.getElementById('postal_code').value.trim();
+    const neighborhood = document.getElementById('neighborhood').value.trim();
+
+    const fullAddress = [address, neighborhood, city, postalCode].filter(Boolean).join(', ');
+    if (!fullAddress) {
+      statusDiv.textContent = 'Please enter an address first.';
+      statusDiv.style.color = 'red';
+      return;
+    }
+
+    const { googleApiKey } = await browserAPI.storage.local.get(['googleApiKey']);
+    if (!googleApiKey) {
+      statusDiv.textContent = 'Google API Key required for geocoding.';
+      statusDiv.style.color = 'red';
+      configSection.classList.remove('hidden');
+      return;
+    }
+
+    analyzeNeighborhood(googleApiKey, fullAddress);
+  });
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
+
+    // Include neighborhood analysis if results are visible
+    const resultsDiv = document.getElementById('neighborhood-results');
+    if (!resultsDiv.classList.contains('hidden')) {
+      const counts = {
+        metro: document.getElementById('count-metro').textContent,
+        bus: document.getElementById('count-bus').textContent,
+        rer: document.getElementById('count-rer').textContent,
+        tram: document.getElementById('count-tram').textContent,
+        shops: document.getElementById('count-shops').textContent,
+        supermarket: document.getElementById('count-supermarket').textContent,
+        school: document.getElementById('count-school').textContent,
+        sports: document.getElementById('count-sports').textContent
+      };
+      data.neighborhood_analysis = `🚇:${counts.metro}, 🚌:${counts.bus}, 🚆:${counts.rer}, 🚋:${counts.tram}, 🛍️:${counts.shops}, 🛒:${counts.supermarket}, 🎓:${counts.school}, 🏋️:${counts.sports}`;
+    }
 
     const { apiKey, databaseId } = await browserAPI.storage.local.get(['apiKey', 'databaseId']);
 
@@ -348,6 +388,36 @@ function populateFormFromNotion(props) {
   if (props['City']) document.getElementById('city').value = getPropText(props['City']);
   if (props['Postal Code']) document.getElementById('postal_code').value = getPropText(props['Postal Code']);
   if (props['Neighborhood']) document.getElementById('neighborhood').value = getPropText(props['Neighborhood']);
+
+  // Handle Neighborhood Analysis parsing
+  if (props['Neighborhood Analysis']) {
+    const analysisText = getPropText(props['Neighborhood Analysis']);
+    if (analysisText) {
+      const parts = analysisText.split(', ');
+      const resultsDiv = document.getElementById('neighborhood-results');
+      resultsDiv.classList.remove('hidden');
+
+      const mapping = {
+        '🚇': 'count-metro',
+        '🚌': 'count-bus',
+        '🚆': 'count-rer',
+        '🚋': 'count-tram',
+        '🛍️': 'count-shops',
+        '🛒': 'count-supermarket',
+        '🎓': 'count-school',
+        '🏋️': 'count-sports'
+      };
+
+      parts.forEach(part => {
+        const [emoji, countStr] = part.split(':');
+        const elementId = mapping[emoji];
+        if (elementId) {
+          document.getElementById(elementId).textContent = countStr || '0';
+        }
+      });
+    }
+  }
+
   if (props['Price']) document.getElementById('price').value = getPropNumber(props['Price']);
   if (props['Area']) document.getElementById('area').value = getPropNumber(props['Area']);
   if (props['Time to Work']) document.getElementById('time_to_work').value = getPropNumber(props['Time to Work']);
@@ -440,6 +510,9 @@ function buildNotionProperties(data) {
     },
     'Neighborhood': {
       rich_text: data.neighborhood ? [{ text: { content: data.neighborhood } }] : []
+    },
+    'Neighborhood Analysis': {
+      rich_text: data.neighborhood_analysis ? [{ text: { content: data.neighborhood_analysis } }] : []
     }
   };
 }
@@ -539,4 +612,136 @@ async function calculateTimeToWork(apiKey, origin, destination) {
       statusDiv.style.color = 'red';
     }
   });
+}
+
+async function analyzeNeighborhood(googleApiKey, address) {
+  const statusDiv = document.getElementById('status');
+  const resultsDiv = document.getElementById('neighborhood-results');
+  statusDiv.textContent = 'Geocoding address...';
+  statusDiv.style.color = 'blue';
+
+  try {
+    // 1. Geocode address to get coordinates
+    const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${googleApiKey}`;
+    const geoResponse = await new Promise(resolve => {
+      browserAPI.runtime.sendMessage({ type: 'FETCH_MAPS', url: geoUrl }, resolve);
+    });
+
+    if (!geoResponse || !geoResponse.success || geoResponse.data.status !== 'OK') {
+      throw new Error('Geocoding failed');
+    }
+
+    const location = geoResponse.data.results[0].geometry.location;
+    const lat = location.lat;
+    const lon = location.lng;
+    console.log(`Geocoding result for "${address}": Lat: ${lat}, Lon: ${lon}`);
+
+    statusDiv.textContent = 'Querying Overpass API (1500m)...';
+
+    // 2. Query Overpass
+    // Use nwr (node, way, relation) to catch areas, and out tags center to get data for ways/relations
+    const query = `
+      [out:json][timeout:60];
+      (
+        // Transport
+        nwr["railway"~"station|tram_stop|halt"](around:1500, ${lat}, ${lon});
+        nwr["highway"="bus_stop"](around:1500, ${lat}, ${lon});
+        nwr["public_transport"~"stop_position|platform"](around:1500, ${lat}, ${lon});
+        
+        // Education
+        nwr["amenity"~"school|kindergarten|college|university"](around:1500, ${lat}, ${lon});
+        
+        // Sports & Leisure
+        nwr["leisure"~"fitness_centre|sports_centre|stadium|pitch|swimming_pool"](around:1500, ${lat}, ${lon});
+        
+        // Shopping
+        nwr["shop"~"supermarket|convenience|bakery|butcher|mall|department_store"](around:1500, ${lat}, ${lon});
+      );
+      out tags center;
+    `;
+
+    const overpassUrl = 'https://overpass-api.de/api/interpreter';
+    const overpassResponse = await new Promise(resolve => {
+      browserAPI.runtime.sendMessage({
+        type: 'FETCH_OVERPASS',
+        url: overpassUrl,
+        body: 'data=' + encodeURIComponent(query)
+      }, resolve);
+    });
+
+    if (!overpassResponse || !overpassResponse.success) {
+      throw new Error(overpassResponse ? overpassResponse.error : 'Overpass query failed');
+    }
+
+    const elements = overpassResponse.data.elements;
+
+    // 3. Process results with deduplication for stations
+    const uniqueMetro = new Set();
+    const uniqueRer = new Set();
+    const uniqueTram = new Set();
+    const uniqueBus = new Set();
+    const uniqueSchools = new Set();
+    const uniqueSports = new Set();
+    const uniqueSupermarkets = new Set();
+    const uniqueShops = new Set();
+
+    elements.forEach(el => {
+      const tags = el.tags || {};
+      const name = tags.name || `id_${el.id}`;
+
+      // Metro logic
+      if ((tags.railway === 'station' && (tags.station === 'subway' || tags.subway === 'yes')) || (tags.subway === 'yes' && tags.public_transport === 'stop_position')) {
+        uniqueMetro.add(name);
+      }
+      // RER / Train logic
+      else if (tags.railway === 'station' && (tags.station === 'train' || tags.train === 'yes')) {
+        uniqueRer.add(name);
+      }
+      // Tram logic
+      else if (tags.railway === 'tram_stop' || tags.tram === 'yes') {
+        uniqueTram.add(name);
+      }
+      // Bus logic
+      else if (tags.highway === 'bus_stop' || tags.bus === 'yes') {
+        uniqueBus.add(name);
+      }
+
+      // Education
+      if (['school', 'kindergarten', 'college', 'university'].includes(tags.amenity)) {
+        uniqueSchools.add(name);
+      }
+
+      // Sports
+      if (['fitness_centre', 'sports_centre', 'stadium', 'pitch', 'swimming_pool'].includes(tags.leisure)) {
+        uniqueSports.add(name);
+      }
+
+      // Shops
+      if (tags.shop === 'supermarket') {
+        uniqueSupermarkets.add(name);
+        uniqueShops.add(name);
+      } else if (tags.shop) {
+        uniqueShops.add(name);
+      }
+    });
+
+    // Update UI
+    document.getElementById('count-metro').textContent = uniqueMetro.size;
+    document.getElementById('count-bus').textContent = uniqueBus.size;
+    document.getElementById('count-rer').textContent = uniqueRer.size;
+    document.getElementById('count-tram').textContent = uniqueTram.size;
+    document.getElementById('count-school').textContent = uniqueSchools.size;
+    document.getElementById('count-sports').textContent = uniqueSports.size;
+    document.getElementById('count-supermarket').textContent = uniqueSupermarkets.size;
+    document.getElementById('count-shops').textContent = uniqueShops.size;
+
+    resultsDiv.classList.remove('hidden');
+    statusDiv.textContent = 'Neighborhood analysis complete!';
+    statusDiv.style.color = 'green';
+
+  } catch (error) {
+    statusDiv.textContent = 'Analysis error: ' + error.message;
+    statusDiv.style.color = 'red';
+    console.error(error);
+  }
 }

@@ -68,7 +68,22 @@
       </div>
       <div class="field">
         <label for="transit_lines">Transit Lines:</label>
-        <input type="text" id="transit_lines" name="transit_lines" placeholder="e.g. RER A, Bus 123">
+        <div class="input-with-action">
+          <input type="text" id="transit_lines" name="transit_lines" placeholder="e.g. RER A, Bus 123">
+          <button type="button" id="analyze-neighborhood" title="Analyze Neighborhood (Overpass)">🔍</button>
+        </div>
+      </div>
+      <div id="neighborhood-results" class="hidden">
+        <div class="results-grid">
+          <div class="result-item"><span class="icon">🚇</span> Metro: <span id="count-metro">0</span></div>
+          <div class="result-item"><span class="icon">🚌</span> Bus: <span id="count-bus">0</span></div>
+          <div class="result-item"><span class="icon">🚆</span> RER/Train: <span id="count-rer">0</span></div>
+          <div class="result-item"><span class="icon">🚋</span> Tramway: <span id="count-tram">0</span></div>
+          <div class="result-item"><span class="icon">🛍️</span> Shops: <span id="count-shops">0</span></div>
+          <div class="result-item"><span class="icon">🛒</span> Supermarkets: <span id="count-supermarket">0</span></div>
+          <div class="result-item"><span class="icon">🎓</span> Schools: <span id="count-school">0</span></div>
+          <div class="result-item"><span class="icon">🏋️</span> Gym/Sports: <span id="count-sports">0</span></div>
+        </div>
       </div>
       <div class="field">
         <label for="area">Area (m²):</label>
