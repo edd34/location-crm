@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const urlInput = document.getElementById('url');
   const addressInput = document.getElementById('address');
   const titleInput = document.getElementById('title');
+  const referenceInput = document.getElementById('reference');
   const magicFillBtn = document.getElementById('magic-fill');
   const addBtn = document.getElementById('add-btn');
 
@@ -131,6 +132,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       statusDiv.textContent = 'AI is thinking...';
       const prompt = `Extract rental property information from this webpage text. Return ONLY a JSON object with these keys: 
       title (short descriptive title), 
+      reference (unique reference of the rental offer, often found at the bottom of the page or near the price),
       address (full address of the RENTAL PROPERTY if found), 
       city (city of the RENTAL PROPERTY only), 
       postal_code (postal code of the RENTAL PROPERTY if found),
@@ -184,6 +186,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Fill form
         if (extracted.title) titleInput.value = extracted.title;
+        if (extracted.reference) referenceInput.value = extracted.reference;
         if (extracted.address) addressInput.value = extracted.address;
         if (extracted.city) document.getElementById('city').value = extracted.city;
         if (extracted.postal_code) document.getElementById('postal_code').value = extracted.postal_code;
@@ -384,6 +387,7 @@ function populateFormFromNotion(props) {
   const getPropPhone = (p) => (p && p.phone_number) ? p.phone_number : "";
 
   if (props['Title']) document.getElementById('title').value = getPropText(props['Title']);
+  if (props['Reference']) document.getElementById('reference').value = getPropText(props['Reference']);
   if (props['Address']) document.getElementById('address').value = getPropText(props['Address']);
   if (props['City']) document.getElementById('city').value = getPropText(props['City']);
   if (props['Postal Code']) document.getElementById('postal_code').value = getPropText(props['Postal Code']);
@@ -462,6 +466,9 @@ function buildNotionProperties(data) {
   return {
     'Title': {
       title: [{ text: { content: data.title } }]
+    },
+    'Reference': {
+      rich_text: data.reference ? [{ text: { content: data.reference } }] : []
     },
     'Address': {
       rich_text: data.address ? [{ text: { content: data.address } }] : []
