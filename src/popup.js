@@ -73,8 +73,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const googleApiKey = document.getElementById('google-api-key').value.trim();
     const workAddress = document.getElementById('work-address').value.trim();
 
-    await browserAPI.storage.local.set({ 
-      apiKey, databaseId, openRouterApiKey, llmUrl, llmModel, userPhone, googleApiKey, workAddress 
+    await browserAPI.storage.local.set({
+      apiKey, databaseId, openRouterApiKey, llmUrl, llmModel, userPhone, googleApiKey, workAddress
     });
     statusDiv.textContent = 'Config saved!';
     statusDiv.style.color = 'green';
@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (extracted.price) document.getElementById('price').value = parseInt(extracted.price);
         if (extracted.area) document.getElementById('area').value = parseInt(extracted.area);
         if (extracted.time_to_work) document.getElementById('time_to_work').value = extracted.time_to_work;
-        
+
         // Handle Tri-state selects
         const setTriState = (id, val) => {
           const el = document.getElementById(id);
@@ -207,7 +207,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (extracted.agency_address) document.getElementById('agency_address').value = extracted.agency_address;
         if (extracted.phone) document.getElementById('phone').value = extracted.phone;
 
-  // Auto-calculate time to work if enough info is found
+        // Auto-calculate time to work if enough info is found
         if ((extracted.address || extracted.city) && googleApiKey && workAddress) {
           const parts = [
             extracted.address,
@@ -236,10 +236,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const neighborhood = document.getElementById('neighborhood').value.trim();
     const city = document.getElementById('city').value.trim();
     const postalCode = document.getElementById('postal_code').value.trim();
-    
+
     const parts = [address, neighborhood, city, postalCode].filter(Boolean);
     const origin = parts.join(', ');
-    
+
     if (origin && googleApiKey && workAddress) {
       calculateTimeToWork(googleApiKey, origin, workAddress);
     }
@@ -477,7 +477,7 @@ async function calculateTimeToWork(apiKey, origin, destination) {
   const nextTuesday = new Date();
   nextTuesday.setDate(nextTuesday.getDate() + (7 - nextTuesday.getDay() + 2) % 7);
   nextTuesday.setHours(9, 0, 0, 0);
-  
+
   // If next Tuesday is already today or in the past (e.g., it's already past 9am Tuesday), move to the following week
   if (nextTuesday <= new Date()) {
     nextTuesday.setDate(nextTuesday.getDate() + 7);
@@ -486,7 +486,7 @@ async function calculateTimeToWork(apiKey, origin, destination) {
   const arrivalTime = Math.floor(nextTuesday.getTime() / 1000);
   // Using Directions API instead of Distance Matrix to get transit details (line names)
   // Added &language=fr to get vehicle names (Métro, Bus, etc.) in French
-  const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&arrival_time=${arrivalTime}&mode=transit&language=fr&key=${apiKey}`;
+  const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&arrival_time=${arrivalTime}&mode=transit&language=fr&key=${apiKey}&transit_mode=rail`;
 
   browserAPI.runtime.sendMessage({
     type: 'FETCH_MAPS',
@@ -497,9 +497,9 @@ async function calculateTimeToWork(apiKey, origin, destination) {
       if (data.status === 'OK' && data.routes.length > 0) {
         const route = data.routes[0];
         const leg = route.legs[0];
-        
+
         // Duration
-        const duration = leg.duration.value; 
+        const duration = leg.duration.value;
         const minutes = Math.round(duration / 60);
         document.getElementById('time_to_work').value = minutes;
 
@@ -510,7 +510,7 @@ async function calculateTimeToWork(apiKey, origin, destination) {
             const line = step.transit_details.line;
             const vehicleName = line.vehicle ? line.vehicle.name : '';
             const shortName = line.short_name || line.name;
-            
+
             // Format as "Vehicle ShortName" (e.g., "Bus 123", "Métro 1", "RER A")
             let fullName = shortName;
             if (vehicleName && shortName && !shortName.toLowerCase().includes(vehicleName.toLowerCase())) {
@@ -518,11 +518,11 @@ async function calculateTimeToWork(apiKey, origin, destination) {
             } else if (vehicleName && !shortName) {
               fullName = vehicleName;
             }
-            
+
             if (fullName) transitLines.push(fullName);
           }
         });
-        
+
         const transitLinesStr = transitLines.join(', ');
         document.getElementById('transit_lines').value = transitLinesStr;
 
