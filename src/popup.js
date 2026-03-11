@@ -385,8 +385,10 @@ function populateFormFromNotion(props) {
   const getPropSelect = (p) => (p && p.select) ? p.select.name : "";
   const getPropMultiSelect = (p) => (p && p.multi_select) ? p.multi_select.map(s => s.name).join(", ") : "";
   const getPropPhone = (p) => (p && p.phone_number) ? p.phone_number : "";
+  const getPropCheckbox = (p) => (p && p.checkbox) ? p.checkbox : false;
 
   if (props['Title']) document.getElementById('title').value = getPropText(props['Title']);
+  if (props['Top Pick']) document.getElementById('is_favorite').checked = getPropCheckbox(props['Top Pick']);
   if (props['Reference']) document.getElementById('reference').value = getPropText(props['Reference']);
   if (props['Address']) document.getElementById('address').value = getPropText(props['Address']);
   if (props['City']) document.getElementById('city').value = getPropText(props['City']);
@@ -466,6 +468,9 @@ function buildNotionProperties(data) {
   return {
     'Title': {
       title: [{ text: { content: data.title } }]
+    },
+    'Top Pick': {
+      checkbox: data.is_favorite === 'on'
     },
     'Reference': {
       rich_text: data.reference ? [{ text: { content: data.reference } }] : []

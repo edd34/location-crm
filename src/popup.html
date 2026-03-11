@@ -35,9 +35,15 @@
       </div>
     </header>
     <form id="rent-form">
-      <div class="field">
-        <label for="title">Title:</label>
-        <input type="text" id="title" name="title" required>
+      <div class="field title-row">
+        <div class="title-input-group">
+          <label for="title">Title:</label>
+          <input type="text" id="title" name="title" required>
+        </div>
+        <div class="favorite-group">
+          <input type="checkbox" id="is_favorite" name="is_favorite" class="hidden-checkbox">
+          <label for="is_favorite" class="heart-icon" title="Top Pick">❤️</label>
+        </div>
       </div>
       <div class="field">
         <label for="reference">Reference:</label>
