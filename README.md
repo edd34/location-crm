@@ -24,7 +24,7 @@ This extension allows you to quickly add rental property information to a Notion
         - `Has Parking` (Type: Status) - Options: "Yes", "No", "Unknown"
         - `Has Cave` (Type: Status) - Options: "Yes", "No", "Unknown"
         - `Furnished` (Type: Status) - Options: "Yes", "No", "Unknown"
-        - `State` (Type: Status) - Recommended options: "Interested", "Contacted", "Visited", "Applied", "Rejected"
+        - `State` (Type: Status) - Recommended options: "Interested", "Contacted", "Visited", "Applied", "Rejected", "To follow up", "On Hold", "Offer made"
         - `Agency` (Type: Text/Rich Text)
         - `Agency Address` (Type: Text/Rich Text)
         - `Phone` (Type: Phone Number)

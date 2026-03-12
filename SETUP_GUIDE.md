@@ -40,7 +40,7 @@ Your Notion database **must** have the following properties (columns) with the e
 | **Agency** | Text | Name of the agency |
 | **Agency Address** | Text | |
 | **Phone** | Phone | Contact number |
-| **State** | Status | (Interested, Applied, Contacted, Visited, etc.) |
+| **State** | Status | (Interested, Applied, Contacted, Visited, Offer made, On Hold, To follow up, Rejected, etc.) |
 | **Has Parking** | Status | (Yes, No, Unknown) |
 | **Has Cave** | Status | (Yes, No, Unknown) |
 | **Furnished** | Status | (Yes, No, Unknown) |
