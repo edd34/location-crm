@@ -9,21 +9,75 @@
 
 <body>
   <div id="config-section" class="hidden">
-    <h3>Notion Config</h3>
-    <input type="password" id="api-key" placeholder="Notion API Key">
-    <input type="text" id="database-id" placeholder="Database ID">
-    <hr>
-    <h3>LLM Config (OpenRouter)</h3>
-    <input type="password" id="openrouter-api-key" placeholder="OpenRouter API Key">
-    <input type="text" id="llm-url" placeholder="LLM URL" value="https://openrouter.ai/api/v1/chat/completions">
-    <input type="text" id="llm-model" placeholder="Model (e.g., google/gemini-flash-1.5-8b)"
-      value="google/gemini-flash-1.5-8b">
-    <input type="text" id="user-phone" placeholder="My Phone Number (to ignore)">
-    <hr>
-    <h3>Google Maps Config</h3>
-    <input type="password" id="google-api-key" placeholder="Google Maps API Key">
-    <input type="text" id="work-address" placeholder="Work Address (Destination)">
-    <button id="save-config">Save Config</button>
+    <div class="config-header">
+      <h3>⚙️ Configuration</h3>
+      <div class="config-header-actions">
+        <button type="button" id="open-options-tab-btn" class="open-tab-btn" title="Ouvrir dans un onglet (recommandé contre la perte de focus)">↗ Onglet</button>
+        <button type="button" id="close-config-btn" title="Fermer les paramètres">✕</button>
+      </div>
+    </div>
+
+    <div id="config-status" class="config-status"></div>
+
+    <div class="config-group">
+      <h4>Notion</h4>
+      <div class="field">
+        <label for="api-key">Notion API Key / Secret :</label>
+        <div class="password-wrapper">
+          <input type="password" id="api-key" placeholder="ntn_..." autocomplete="off">
+          <button type="button" class="toggle-password" data-target="api-key" title="Afficher/Masquer">👁️</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="database-id">Database ID :</label>
+        <input type="text" id="database-id" placeholder="32 caractères hexadécimaux">
+      </div>
+    </div>
+
+    <div class="config-group">
+      <h4>Intelligence Artificielle (OpenRouter)</h4>
+      <div class="field">
+        <label for="openrouter-api-key">OpenRouter API Key :</label>
+        <div class="password-wrapper">
+          <input type="password" id="openrouter-api-key" placeholder="sk-or-v1-..." autocomplete="off">
+          <button type="button" class="toggle-password" data-target="openrouter-api-key" title="Afficher/Masquer">👁️</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="llm-model">Modèle IA :</label>
+        <input type="text" id="llm-model" placeholder="ex: minimax/minimax-m2.5 ou google/gemini-flash-1.5-8b"
+          value="google/gemini-flash-1.5-8b">
+      </div>
+      <div class="field">
+        <label for="llm-url">API URL :</label>
+        <input type="text" id="llm-url" placeholder="https://openrouter.ai/api/v1/chat/completions"
+          value="https://openrouter.ai/api/v1/chat/completions">
+      </div>
+      <div class="field">
+        <label for="user-phone">Mon téléphone (pour ignorer dans l'annonce) :</label>
+        <input type="text" id="user-phone" placeholder="ex: +33612345678">
+      </div>
+    </div>
+
+    <div class="config-group">
+      <h4>Google Maps (Trajets & Géocodage)</h4>
+      <div class="field">
+        <label for="google-api-key">Google Maps API Key :</label>
+        <div class="password-wrapper">
+          <input type="password" id="google-api-key" placeholder="AIzaSy..." autocomplete="off">
+          <button type="button" class="toggle-password" data-target="google-api-key" title="Afficher/Masquer">👁️</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="work-address">Adresse du travail / Destination :</label>
+        <input type="text" id="work-address" placeholder="ex: 123 rue de Rivoli, Paris">
+      </div>
+    </div>
+
+    <div class="config-actions">
+      <button type="button" id="cancel-config" class="secondary-btn">Annuler</button>
+      <button type="button" id="save-config" class="primary-btn">Enregistrer</button>
+    </div>
   </div>
 
   <div id="main-section">

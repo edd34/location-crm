@@ -28,9 +28,14 @@ function sendMessage(message) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   const form = document.getElementById('rent-form');
-  const settingsBtn = document.getElementById('settings-btn');
+  const mainSection = document.getElementById('main-section');
   const configSection = document.getElementById('config-section');
+  const settingsBtn = document.getElementById('settings-btn');
+  const closeConfigBtn = document.getElementById('close-config-btn');
+  const openOptionsTabBtn = document.getElementById('open-options-tab-btn');
+  const cancelConfigBtn = document.getElementById('cancel-config');
   const saveConfigBtn = document.getElementById('save-config');
+  const configStatus = document.getElementById('config-status');
   const statusDiv = document.getElementById('status');
   const urlInput = document.getElementById('url');
   const addressInput = document.getElementById('address');
@@ -40,6 +45,35 @@ document.addEventListener('DOMContentLoaded', async () => {
   const addBtn = document.getElementById('add-btn');
   const permissionsBanner = document.getElementById('permissions-banner');
   const grantPermissionsBtn = document.getElementById('grant-permissions-btn');
+
+  const CONFIG_FIELDS = [
+    { key: 'apiKey', id: 'api-key' },
+    { key: 'databaseId', id: 'database-id' },
+    { key: 'openRouterApiKey', id: 'openrouter-api-key' },
+    { key: 'llmUrl', id: 'llm-url' },
+    { key: 'llmModel', id: 'llm-model' },
+    { key: 'userPhone', id: 'user-phone' },
+    { key: 'googleApiKey', id: 'google-api-key' },
+    { key: 'workAddress', id: 'work-address' }
+  ];
+
+  const openOptionsTab = () => {
+    if (browserAPI.runtime && browserAPI.runtime.openOptionsPage) {
+      browserAPI.runtime.openOptionsPage();
+    } else {
+      browserAPI.tabs.create({ url: browserAPI.runtime.getURL('options.html') });
+    }
+  };
+
+  const showSettings = () => {
+    configSection.classList.remove('hidden');
+    mainSection.classList.add('hidden');
+  };
+
+  const hideSettings = () => {
+    configSection.classList.add('hidden');
+    mainSection.classList.remove('hidden');
+  };
 
   // Load Config
   const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId', 'openRouterApiKey', 'llmUrl', 'llmModel', 'userPhone', 'googleApiKey', 'workAddress']);
@@ -53,7 +87,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (savedConfig.workAddress) document.getElementById('work-address').value = savedConfig.workAddress;
 
   if (!savedConfig.apiKey || !savedConfig.databaseId) {
-    configSection.classList.remove('hidden');
+    showSettings();
   }
 
   // Get current tab URL and Title
@@ -88,27 +122,75 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error("Could not get current tab info", err);
   }
 
-  settingsBtn.addEventListener('click', () => {
-    configSection.classList.toggle('hidden');
+  // Settings button: opens options tab (recommended to prevent focus loss)
+  settingsBtn.addEventListener('click', (e) => {
+    if (e.shiftKey) {
+      if (configSection.classList.contains('hidden')) {
+        showSettings();
+      } else {
+        hideSettings();
+      }
+    } else {
+      openOptionsTab();
+    }
+  });
+
+  if (openOptionsTabBtn) openOptionsTabBtn.addEventListener('click', openOptionsTab);
+  if (closeConfigBtn) closeConfigBtn.addEventListener('click', hideSettings);
+  if (cancelConfigBtn) cancelConfigBtn.addEventListener('click', hideSettings);
+
+  // Password toggle visibility
+  document.querySelectorAll('.toggle-password').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-target');
+      const input = document.getElementById(targetId);
+      if (input) {
+        input.type = input.type === 'password' ? 'text' : 'password';
+      }
+    });
+  });
+
+  // Auto-save draft as user types so data is never lost even if popup closes
+  let configDebounce = null;
+  const autoSaveConfig = () => {
+    const dataToSave = {};
+    for (const item of CONFIG_FIELDS) {
+      const el = document.getElementById(item.id);
+      if (el) dataToSave[item.key] = el.value.trim();
+    }
+    browserAPI.storage.local.set(dataToSave).catch(() => {});
+  };
+
+  CONFIG_FIELDS.forEach(item => {
+    const el = document.getElementById(item.id);
+    if (el) {
+      el.addEventListener('change', autoSaveConfig);
+      el.addEventListener('input', () => {
+        clearTimeout(configDebounce);
+        configDebounce = setTimeout(autoSaveConfig, 500);
+      });
+    }
   });
 
   saveConfigBtn.addEventListener('click', async () => {
-    const apiKey = document.getElementById('api-key').value.trim();
-    const databaseId = document.getElementById('database-id').value.trim();
-    const openRouterApiKey = document.getElementById('openrouter-api-key').value.trim();
-    const llmUrl = document.getElementById('llm-url').value.trim();
-    const llmModel = document.getElementById('llm-model').value.trim();
-    const userPhone = document.getElementById('user-phone').value.trim();
-    const googleApiKey = document.getElementById('google-api-key').value.trim();
-    const workAddress = document.getElementById('work-address').value.trim();
+    const dataToSave = {};
+    for (const item of CONFIG_FIELDS) {
+      const el = document.getElementById(item.id);
+      if (el) dataToSave[item.key] = el.value.trim();
+    }
 
-    await browserAPI.storage.local.set({
-      apiKey, databaseId, openRouterApiKey, llmUrl, llmModel, userPhone, googleApiKey, workAddress
-    });
-    statusDiv.textContent = 'Config saved!';
+    await browserAPI.storage.local.set(dataToSave);
+    if (configStatus) {
+      configStatus.textContent = 'Configuration enregistrée !';
+      configStatus.style.color = 'green';
+    }
+    statusDiv.textContent = 'Configuration enregistrée !';
     statusDiv.style.color = 'green';
-    configSection.classList.add('hidden');
-    setTimeout(() => statusDiv.textContent = '', 2000);
+
+    setTimeout(() => {
+      if (configStatus) configStatus.textContent = '';
+      hideSettings();
+    }, 600);
   });
 
   // Check for host permissions (especially important for Firefox MV3 where they are optional)
@@ -170,7 +252,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!openRouterApiKey) {
       statusDiv.textContent = 'Please configure OpenRouter API Key first!';
       statusDiv.style.color = 'red';
-      configSection.classList.remove('hidden');
+      showSettings();
       return;
     }
 
@@ -335,7 +417,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!googleApiKey) {
       statusDiv.textContent = 'Google API Key required for geocoding.';
       statusDiv.style.color = 'red';
-      configSection.classList.remove('hidden');
+      showSettings();
       return;
     }
 
@@ -378,7 +460,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!apiKey || !databaseId) {
       statusDiv.textContent = 'Please configure API key and Database ID first!';
       statusDiv.style.color = 'red';
-      configSection.classList.remove('hidden');
+      showSettings();
       return;
     }
 

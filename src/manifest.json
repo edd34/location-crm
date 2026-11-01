@@ -22,6 +22,10 @@
   "action": {
     "default_popup": "popup.html"
   },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "notion-rent-tracker@example.com",

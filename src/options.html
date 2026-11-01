@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notion Rent Tracker - Paramètres</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <div class="header-title">
+        <span class="icon">⚙️</span>
+        <div>
+          <h1>Configuration - Notion Rent Tracker</h1>
+          <p class="subtitle">Configurez vos accès API et préférences. Vos identifiants sont stockés en local et de manière sécurisée dans votre navigateur.</p>
+        </div>
+      </div>
+      <div id="status-bar" class="status-bar hidden"></div>
+    </header>
+
+    <main class="settings-form">
+      <!-- Section 1: Notion -->
+      <section class="card">
+        <div class="card-header">
+          <h2>📊 Notion</h2>
+          <span class="badge">Requis</span>
+        </div>
+        <p class="card-desc">Permet de sauvegarder vos fiches de location et d'ajouter les points d'intérêt en commentaire.</p>
+
+        <div class="form-group">
+          <label for="api-key">Clé d'API Notion (Internal Integration Secret) :</label>
+          <div class="input-with-button">
+            <input type="password" id="api-key" placeholder="ntn_..." autocomplete="off">
+            <button type="button" class="toggle-password" data-target="api-key" title="Afficher/Masquer le mot de passe">👁️</button>
+          </div>
+          <small class="helper-text">Créée sur <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener">notion.so/my-integrations</a>. Veillez à cocher la capacité <strong>"Insert comments"</strong>.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="database-id">ID de la base de données Notion :</label>
+          <input type="text" id="database-id" placeholder="ex: 30c7c195af838065abf7cfa4a8214a5e" autocomplete="off">
+          <small class="helper-text">Les 32 caractères dans l'URL de votre base Notion après le nom d'espace et avant le <code>?v=...</code>. N'oubliez pas d'inviter votre intégration sur la base (menu <code>...</code> > <em>Connexions</em>).</small>
+        </div>
+      </section>
+
+      <!-- Section 2: OpenRouter (IA) -->
+      <section class="card">
+        <div class="card-header">
+          <h2>✨ Intelligence Artificielle (OpenRouter)</h2>
+          <span class="badge optional">Optionnel</span>
+        </div>
+        <p class="card-desc">Utilisé par le bouton <strong>AI Fill</strong> pour extraire automatiquement les caractéristiques de l'annonce immobilière.</p>
+
+        <div class="form-group">
+          <label for="openrouter-api-key">Clé d'API OpenRouter :</label>
+          <div class="input-with-button">
+            <input type="password" id="openrouter-api-key" placeholder="sk-or-v1-..." autocomplete="off">
+            <button type="button" class="toggle-password" data-target="openrouter-api-key" title="Afficher/Masquer le mot de passe">👁️</button>
+          </div>
+          <small class="helper-text">Disponible sur <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>.</small>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="llm-model">Modèle IA :</label>
+            <input type="text" id="llm-model" placeholder="google/gemini-flash-1.5-8b ou minimax/minimax-m2.5" value="google/gemini-flash-1.5-8b">
+          </div>
+
+          <div class="form-group">
+            <label for="user-phone">Mon téléphone (à ignorer dans l'annonce) :</label>
+            <input type="text" id="user-phone" placeholder="ex: +33612345678">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="llm-url">URL de l'API LLM :</label>
+          <input type="text" id="llm-url" placeholder="https://openrouter.ai/api/v1/chat/completions" value="https://openrouter.ai/api/v1/chat/completions">
+        </div>
+      </section>
+
+      <!-- Section 3: Google Maps -->
+      <section class="card">
+        <div class="card-header">
+          <h2>🗺️ Google Maps</h2>
+          <span class="badge optional">Optionnel</span>
+        </div>
+        <p class="card-desc">Permet de calculer le temps de trajet vers votre travail et de géocoder l'adresse pour les points d'intérêt.</p>
+
+        <div class="form-group">
+          <label for="google-api-key">Clé d'API Google Maps (Directions & Geocoding) :</label>
+          <div class="input-with-button">
+            <input type="password" id="google-api-key" placeholder="AIzaSy..." autocomplete="off">
+            <button type="button" class="toggle-password" data-target="google-api-key" title="Afficher/Masquer le mot de passe">👁️</button>
+          </div>
+          <small class="helper-text">Générée depuis la Google Cloud Console avec les API <em>Directions API</em> et <em>Geocoding API</em> activées.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="work-address">Adresse de destination / Travail :</label>
+          <input type="text" id="work-address" placeholder="ex: 123 Rue de Rivoli, 75001 Paris">
+          <small class="helper-text">Point de repère utilisé pour calculer les temps de transport en commun et en voiture.</small>
+        </div>
+      </section>
+
+      <!-- Bottom Actions -->
+      <div class="action-footer">
+        <div class="auto-save-note">💡 Les modifications sont enregistrées automatiquement en local.</div>
+        <button type="button" id="save-btn" class="btn btn-primary">Enregistrer la configuration</button>
+      </div>
+    </main>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
