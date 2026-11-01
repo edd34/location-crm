@@ -53,7 +53,7 @@ Your Notion database **must** have the following properties (columns) with the e
 
 ## 🔑 3. Configuration
 
-Click the **Settings (⚙️)** icon in the extension popup to enter your keys:
+Click the **Settings (⚙️)** icon in the extension popup (or right-click the extension icon > Options) to open the dedicated Settings page in a browser tab without losing focus:
 
 1.  **Notion API Key**: Create one at [developers.notion.com](https://developers.notion.com/) (make sure "Insert comments" capability is enabled).
 2.  **Notion Database ID**: The string of characters in your database URL after the workspace name and before the `?`.

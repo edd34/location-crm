@@ -59,7 +59,7 @@ This extension allows you to quickly add rental property information to a Notion
 2.  Enable **"Developer mode"** (top right toggle).
 3.  Click **"Load unpacked"** and select the `src/` folder of this project.
 4.  The extension should now appear in your extensions list.
-5.  Click the extension icon, go to Settings (gear icon), and enter your keys and database ID.
+5.  Click the extension icon, go to Settings (gear icon) or right-click > Options to open the configuration page in a new tab, and enter your keys and database ID.
 
 ### Firefox
 1.  Open Firefox and go to `about:debugging`.
@@ -67,7 +67,7 @@ This extension allows you to quickly add rental property information to a Notion
 3.  Click **"Load Temporary Add-on..."**.
 4.  Navigate to this project's `src` folder and select `manifest.json`.
 5.  The extension should now appear in your extensions list.
-6.  Click the extension icon, go to Settings (gear icon), and enter your **Notion API Key** and **Database ID**.
+6.  Click the extension icon, go to Settings (gear icon) or right-click > Options, and enter your **Notion API Key** and **Database ID**.
 
 ## Permissions (Host Permissions)
 
