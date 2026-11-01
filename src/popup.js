@@ -398,6 +398,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusDiv.textContent = existingPageId ? 'Updated successfully!' : 'Added successfully!';
         statusDiv.style.color = 'green';
         if (!existingPageId) {
+          latestPoiAnalysis = null;
           form.reset();
           // Re-fill URL after reset
           const tabs = await browserAPI.tabs.query({ active: true, currentWindow: true });
@@ -583,31 +584,20 @@ async function updateInNotion(apiKey, pageId, data, databaseId) {
   });
 
   if (updateRes && updateRes.success && latestPoiAnalysis) {
-    const blocks = buildNotionDescriptionBlocks(latestPoiAnalysis);
-    if (blocks.length > 0) {
-      await sendMessage({
-        type: 'FETCH_NOTION',
-        url: `https://api.notion.com/v1/blocks/${pageId}/children`,
-        method: 'PATCH',
-        apiKey: apiKey,
-        body: { children: blocks }
-      });
-    }
+    await addCommentToNotion(apiKey, pageId, latestPoiAnalysis);
   }
 
   return updateRes;
 }
 
-function buildNotionDescriptionBlocks(poiAnalysis) {
+function buildPoiCommentRichText(poiAnalysis) {
   if (!poiAnalysis) return [];
-  const blocks = [];
+  const richText = [];
 
-  blocks.push({
-    object: 'block',
-    type: 'heading_2',
-    heading_2: {
-      rich_text: [{ type: 'text', text: { content: "📍 Analyse du quartier et points d'intérêt" } }]
-    }
+  richText.push({
+    type: 'text',
+    text: { content: "📍 Analyse du quartier et points d'intérêt\n\n" },
+    annotations: { bold: true }
   });
 
   const categoryLabels = {
@@ -621,55 +611,79 @@ function buildNotionDescriptionBlocks(poiAnalysis) {
     sports: '🏋️ Sport & Loisirs'
   };
 
-  // Section 1: Rayon de 1,5 km
-  blocks.push({
-    object: 'block',
-    type: 'heading_3',
-    heading_3: {
-      rich_text: [{ type: 'text', text: { content: "📍 Dans un rayon de 1,5 km (à pied)" } }]
-    }
+  // Section 1: Rayon de 1,5 km (à pied)
+  richText.push({
+    type: 'text',
+    text: { content: "📍 Dans un rayon de 1,5 km (à pied) :\n" },
+    annotations: { bold: true }
   });
 
   for (const [cat, label] of Object.entries(categoryLabels)) {
     const count = (poiAnalysis.summary1500m && poiAnalysis.summary1500m[cat]) || 0;
     const names = (poiAnalysis.details1500m && poiAnalysis.details1500m[cat]) ? poiAnalysis.details1500m[cat].slice(0, 10) : [];
-    const content = names.length > 0
-      ? `${label} (${count}) : ${names.join(', ')}${names.length < count ? '...' : ''}`
-      : `${label} : ${count}`;
-    blocks.push({
-      object: 'block',
-      type: 'bulleted_list_item',
-      bulleted_list_item: {
-        rich_text: [{ type: 'text', text: { content } }]
-      }
+    const line = names.length > 0
+      ? `• ${label} (${count}) : ${names.join(', ')}${names.length < count ? '...' : ''}\n`
+      : `• ${label} : ${count}\n`;
+    richText.push({
+      type: 'text',
+      text: { content: line }
     });
   }
 
-  // Section 2: Rayon de 10 min en voiture
-  blocks.push({
-    object: 'block',
-    type: 'heading_3',
-    heading_3: {
-      rich_text: [{ type: 'text', text: { content: "🚗 Dans un rayon de 10 min en voiture" } }]
-    }
+  richText.push({
+    type: 'text',
+    text: { content: "\n" }
   });
 
-  for (const [cat, label] of Object.entries(categoryLabels)) {
+  // Section 2: Rayon de 10 min en voiture
+  richText.push({
+    type: 'text',
+    text: { content: "🚗 Dans un rayon de 10 min en voiture :\n" },
+    annotations: { bold: true }
+  });
+
+  const carEntries = Object.entries(categoryLabels);
+  for (let i = 0; i < carEntries.length; i++) {
+    const [cat, label] = carEntries[i];
     const count = (poiAnalysis.summaryCar && poiAnalysis.summaryCar[cat]) || 0;
     const names = (poiAnalysis.detailsCar && poiAnalysis.detailsCar[cat]) ? poiAnalysis.detailsCar[cat].slice(0, 10) : [];
-    const content = names.length > 0
-      ? `${label} (${count}) : ${names.join(', ')}${names.length < count ? '...' : ''}`
-      : `${label} : ${count}`;
-    blocks.push({
-      object: 'block',
-      type: 'bulleted_list_item',
-      bulleted_list_item: {
-        rich_text: [{ type: 'text', text: { content } }]
-      }
+    const line = names.length > 0
+      ? `• ${label} (${count}) : ${names.join(', ')}${names.length < count ? '...' : ''}${i < carEntries.length - 1 ? '\n' : ''}`
+      : `• ${label} : ${count}${i < carEntries.length - 1 ? '\n' : ''}`;
+    richText.push({
+      type: 'text',
+      text: { content: line }
     });
   }
 
-  return blocks;
+  return richText;
+}
+
+async function addCommentToNotion(apiKey, pageId, poiAnalysis) {
+  if (!poiAnalysis) return null;
+  const richText = buildPoiCommentRichText(poiAnalysis);
+  if (!richText || richText.length === 0) return null;
+
+  try {
+    const commentRes = await sendMessage({
+      type: 'FETCH_NOTION',
+      url: 'https://api.notion.com/v1/comments',
+      method: 'POST',
+      apiKey: apiKey,
+      body: {
+        parent: { page_id: pageId },
+        rich_text: richText
+      }
+    });
+
+    if (!commentRes || !commentRes.success) {
+      console.warn("Failed to add POI comment to Notion page:", commentRes ? commentRes.error : "Unknown error");
+    }
+    return commentRes;
+  } catch (err) {
+    console.warn("Error calling addCommentToNotion:", err);
+    return null;
+  }
 }
 
 function buildNotionProperties(data, dbProperties = null) {
@@ -770,17 +784,19 @@ async function addToNotion(apiKey, databaseId, data) {
     properties: properties
   };
 
-  if (latestPoiAnalysis) {
-    body.children = buildNotionDescriptionBlocks(latestPoiAnalysis);
-  }
-
-  return await sendMessage({
+  const createRes = await sendMessage({
     type: 'FETCH_NOTION',
     url: 'https://api.notion.com/v1/pages',
     method: 'POST',
     apiKey: apiKey,
     body: body
   });
+
+  if (createRes && createRes.success && createRes.data && createRes.data.id && latestPoiAnalysis) {
+    await addCommentToNotion(apiKey, createRes.data.id, latestPoiAnalysis);
+  }
+
+  return createRes;
 }
 
 async function calculateTimeToWork(apiKey, origin, destination) {
