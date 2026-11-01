@@ -357,8 +357,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (extracted.agency_address) document.getElementById('agency_address').value = extracted.agency_address;
       if (extracted.phone) document.getElementById('phone').value = extracted.phone;
 
-      // Auto-calculate time to work if enough info is found
-      if ((extracted.address || extracted.city) && googleApiKey && workAddress) {
+      // Auto-calculate time to work and neighborhood POIs if enough info is found
+      if ((extracted.address || extracted.city) && googleApiKey) {
         const parts = [
           extracted.address,
           extracted.neighborhood,
@@ -366,7 +366,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           extracted.postal_code
         ].filter(Boolean);
         const origin = parts.join(', ');
-        calculateTimeToWork(googleApiKey, origin, workAddress);
+        if (workAddress) {
+          await calculateTimeToWork(googleApiKey, origin, workAddress);
+        }
+        await analyzeNeighborhood(googleApiKey, origin);
       } else {
         statusDiv.textContent = 'AI Fill complete!';
         statusDiv.style.color = 'green';
@@ -429,6 +432,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
 
+    const { apiKey, databaseId, googleApiKey } = await browserAPI.storage.local.get(['apiKey', 'databaseId', 'googleApiKey']);
+
+    if (!apiKey || !databaseId) {
+      statusDiv.textContent = 'Please configure API key and Database ID first!';
+      statusDiv.style.color = 'red';
+      showSettings();
+      return;
+    }
+
+    // Automatically run neighborhood POI analysis on submit if not yet analyzed in this session
+    if (!latestPoiAnalysis && googleApiKey) {
+      const fullAddress = [
+        addressInput.value.trim(),
+        document.getElementById('neighborhood').value.trim(),
+        document.getElementById('city').value.trim(),
+        document.getElementById('postal_code').value.trim()
+      ].filter(Boolean).join(', ');
+      if (fullAddress) {
+        await analyzeNeighborhood(googleApiKey, fullAddress);
+      }
+    }
+
     // Include neighborhood analysis if results are visible
     const resultsDiv = document.getElementById('neighborhood-results');
     if (!resultsDiv.classList.contains('hidden')) {
@@ -453,15 +478,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         sports: document.getElementById('count-car-sports') ? document.getElementById('count-car-sports').textContent : '0'
       };
       data.neighborhood_analysis = `[1.5km] 🚇:${counts15.metro}, 🚌:${counts15.bus}, 🚆:${counts15.rer}, 🚋:${counts15.tram}, 🛍️:${counts15.shops}, 🛒:${counts15.supermarket}, 🎓:${counts15.school}, 🏋️:${counts15.sports} | [10min 🚗] 🚇:${countsCar.metro}, 🚌:${countsCar.bus}, 🚆:${countsCar.rer}, 🚋:${countsCar.tram}, 🛍️:${countsCar.shops}, 🛒:${countsCar.supermarket}, 🎓:${countsCar.school}, 🏋️:${countsCar.sports}`;
-    }
 
-    const { apiKey, databaseId } = await browserAPI.storage.local.get(['apiKey', 'databaseId']);
-
-    if (!apiKey || !databaseId) {
-      statusDiv.textContent = 'Please configure API key and Database ID first!';
-      statusDiv.style.color = 'red';
-      showSettings();
-      return;
+      if (!latestPoiAnalysis) {
+        latestPoiAnalysis = {
+          summary1500m: counts15,
+          summaryCar: countsCar,
+          details1500m: {},
+          detailsCar: {}
+        };
+      }
     }
 
     try {
@@ -477,12 +502,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       if (result.success) {
-        if (result.commentError) {
+        if (result.commentAdded || result.blocksAdded) {
+          statusDiv.textContent = existingPageId
+            ? 'Updated in Notion (with POI details & comment)!'
+            : 'Added to Notion (with POI details & comment)!';
+          statusDiv.style.color = 'green';
+        } else if (result.commentError) {
           statusDiv.textContent = (existingPageId ? 'Updated' : 'Added') + ' (⚠️ Comment: ' + result.commentError + ')';
           statusDiv.style.color = '#d97706';
-        } else if (result.commentAdded) {
-          statusDiv.textContent = existingPageId ? 'Updated successfully with POI comment!' : 'Added successfully with POI comment!';
-          statusDiv.style.color = 'green';
         } else {
           statusDiv.textContent = existingPageId ? 'Updated successfully!' : 'Added successfully!';
           statusDiv.style.color = 'green';
@@ -675,6 +702,22 @@ async function updateInNotion(apiKey, pageId, data, databaseId) {
 
   if (updateRes && updateRes.success) {
     if (latestPoiAnalysis) {
+      // 1. Append detailed POI blocks to the Notion page body / description
+      const blocks = buildNotionDescriptionBlocks(latestPoiAnalysis);
+      if (blocks.length > 0) {
+        const blockRes = await sendMessage({
+          type: 'FETCH_NOTION',
+          url: `https://api.notion.com/v1/blocks/${pageId}/children`,
+          method: 'PATCH',
+          apiKey: apiKey,
+          body: { children: blocks }
+        });
+        if (blockRes && blockRes.success) {
+          updateRes.blocksAdded = true;
+        }
+      }
+
+      // 2. Also post as a comment attached to the Notion page
       console.log("Adding POI comment on update for page:", pageId);
       const commentRes = await addCommentToNotion(apiKey, pageId, latestPoiAnalysis);
       if (commentRes && !commentRes.success) {
@@ -688,6 +731,80 @@ async function updateInNotion(apiKey, pageId, data, databaseId) {
   }
 
   return updateRes;
+}
+
+function buildNotionDescriptionBlocks(poiAnalysis) {
+  if (!poiAnalysis) return [];
+  const blocks = [];
+
+  blocks.push({
+    object: 'block',
+    type: 'heading_2',
+    heading_2: {
+      rich_text: [{ type: 'text', text: { content: "📍 Analyse du quartier et points d'intérêt" } }]
+    }
+  });
+
+  const categoryLabels = {
+    metro: '🚇 Métro',
+    rer: '🚆 RER / Train',
+    tram: '🚋 Tramway',
+    bus: '🚌 Bus',
+    supermarket: '🛒 Supermarchés',
+    shops: '🛍️ Commerces',
+    school: '🎓 Écoles & Universités',
+    sports: '🏋️ Sport & Loisirs'
+  };
+
+  // Section 1: Rayon de 1,5 km
+  blocks.push({
+    object: 'block',
+    type: 'heading_3',
+    heading_3: {
+      rich_text: [{ type: 'text', text: { content: "📍 Dans un rayon de 1,5 km (à pied)" } }]
+    }
+  });
+
+  for (const [cat, label] of Object.entries(categoryLabels)) {
+    const count = (poiAnalysis.summary1500m && poiAnalysis.summary1500m[cat]) || 0;
+    const names = (poiAnalysis.details1500m && poiAnalysis.details1500m[cat]) ? poiAnalysis.details1500m[cat].slice(0, 10) : [];
+    const content = names.length > 0
+      ? `${label} (${count}) : ${names.join(', ')}${names.length < count ? '...' : ''}`
+      : `${label} : ${count}`;
+    blocks.push({
+      object: 'block',
+      type: 'bulleted_list_item',
+      bulleted_list_item: {
+        rich_text: [{ type: 'text', text: { content } }]
+      }
+    });
+  }
+
+  // Section 2: Rayon de 10 min en voiture
+  blocks.push({
+    object: 'block',
+    type: 'heading_3',
+    heading_3: {
+      rich_text: [{ type: 'text', text: { content: "🚗 Dans un rayon de 10 min en voiture" } }]
+    }
+  });
+
+  for (const [cat, label] of Object.entries(categoryLabels)) {
+    const count = (poiAnalysis.summaryCar && poiAnalysis.summaryCar[cat]) || 0;
+    const names = (poiAnalysis.detailsCar && poiAnalysis.detailsCar[cat]) ? poiAnalysis.detailsCar[cat].slice(0, 10) : [];
+    const content = names.length > 0
+      ? `${label} (${count}) : ${names.join(', ')}${names.length < count ? '...' : ''}`
+      : `${label} : ${count}`;
+    blocks.push({
+      object: 'block',
+      type: 'bulleted_list_item',
+      bulleted_list_item: {
+        rich_text: [{ type: 'text', text: { content } }]
+      }
+    });
+  }
+
+  return blocks;
 }
 
 function buildPoiCommentRichText(poiAnalysis) {
@@ -895,6 +1012,13 @@ async function addToNotion(apiKey, databaseId, data) {
     properties: properties
   };
 
+  if (latestPoiAnalysis) {
+    const blocks = buildNotionDescriptionBlocks(latestPoiAnalysis);
+    if (blocks.length > 0) {
+      body.children = blocks;
+    }
+  }
+
   const createRes = await sendMessage({
     type: 'FETCH_NOTION',
     url: 'https://api.notion.com/v1/pages',
@@ -905,6 +1029,7 @@ async function addToNotion(apiKey, databaseId, data) {
 
   if (createRes && createRes.success && createRes.data && createRes.data.id) {
     if (latestPoiAnalysis) {
+      createRes.blocksAdded = Boolean(body.children && body.children.length > 0);
       console.log("Adding POI comment on create for new page:", createRes.data.id);
       const commentRes = await addCommentToNotion(apiKey, createRes.data.id, latestPoiAnalysis);
       if (commentRes && !commentRes.success) {
@@ -1097,36 +1222,9 @@ async function analyzeNeighborhood(googleApiKey, address) {
       maxLon = lon + 0.045 / cosLat;
     }
 
-    statusDiv.textContent = 'Querying Overpass API for POIs...';
+    statusDiv.textContent = 'Searching nearby POIs (1.5km & 10min car)...';
 
-    // 3. Query Overpass with bounding box
-    const query = `
-      [out:json][timeout:60][bbox:${minLat.toFixed(5)},${minLon.toFixed(5)},${maxLat.toFixed(5)},${maxLon.toFixed(5)}];
-      (
-        nwr["railway"~"station|tram_stop|halt"];
-        nwr["highway"="bus_stop"];
-        nwr["public_transport"~"stop_position|platform"];
-        nwr["amenity"~"school|kindergarten|college|university"];
-        nwr["leisure"~"fitness_centre|sports_centre|stadium|pitch|swimming_pool"];
-        nwr["shop"~"supermarket|convenience|bakery|butcher|mall|department_store"];
-      );
-      out tags center;
-    `;
-
-    const overpassUrl = 'https://overpass-api.de/api/interpreter';
-    const overpassResponse = await sendMessage({
-      type: 'FETCH_OVERPASS',
-      url: overpassUrl,
-      body: 'data=' + encodeURIComponent(query)
-    });
-
-    if (!overpassResponse || !overpassResponse.success) {
-      throw new Error(overpassResponse ? overpassResponse.error : 'Overpass query failed');
-    }
-
-    const elements = overpassResponse.data.elements;
-
-    // 4. Process results for both 1.5 km (walking) and 10 min (car)
+    // 3. Process results for both 1.5 km (walking) and 10 min (car)
     const set15 = {
       metro: new Set(),
       rer: new Set(),
@@ -1149,59 +1247,125 @@ async function analyzeNeighborhood(googleApiKey, address) {
       shops: new Set()
     };
 
-    elements.forEach(el => {
-      const tags = el.tags || {};
-      const name = tags.name || `id_${el.id}`;
-      const elLat = el.lat !== undefined ? el.lat : (el.center ? el.center.lat : null);
-      const elLon = el.lon !== undefined ? el.lon : (el.center ? el.center.lon : null);
-      if (elLat === null || elLon === null) return;
+    const addPOI = (category, name, isWithin15, isWithinCar) => {
+      if (isWithin15) set15[category].add(name);
+      if (isWithinCar) setCar[category].add(name);
+    };
 
-      const dist = getDistanceFromLatLonInMeters(lat, lon, elLat, elLon);
-      const isWithin15 = dist <= 1500;
-      const isWithinCar = isochronePolygon ? isPointInPolygon([elLon, elLat], isochronePolygon) : dist <= 5000;
+    // Primary POI source: Google Places Nearby Search API (fast & reliable)
+    const placeCategories = [
+      { cat: 'metro', type: 'subway_station' },
+      { cat: 'rer', type: 'train_station' },
+      { cat: 'tram', type: 'light_rail_station' },
+      { cat: 'bus', type: 'bus_station' },
+      { cat: 'supermarket', type: 'supermarket' },
+      { cat: 'shops', type: 'store' },
+      { cat: 'school', type: 'school' },
+      { cat: 'sports', type: 'gym' }
+    ];
 
-      if (!isWithin15 && !isWithinCar) return;
-
-      const addPOI = (category) => {
-        if (isWithin15) set15[category].add(name);
-        if (isWithinCar) setCar[category].add(name);
-      };
-
-      // Metro logic
-      if ((tags.railway === 'station' && (tags.station === 'subway' || tags.subway === 'yes')) || (tags.subway === 'yes' && tags.public_transport === 'stop_position')) {
-        addPOI('metro');
-      }
-      // RER / Train logic
-      else if (tags.railway === 'station' && (tags.station === 'train' || tags.train === 'yes')) {
-        addPOI('rer');
-      }
-      // Tram logic
-      else if (tags.railway === 'tram_stop' || tags.tram === 'yes') {
-        addPOI('tram');
-      }
-      // Bus logic
-      else if (tags.highway === 'bus_stop' || tags.bus === 'yes') {
-        addPOI('bus');
+    let googlePlacesSucceeded = false;
+    try {
+      const placePromises = [];
+      for (const { cat, type } of placeCategories) {
+        for (const radius of [1500, 5000]) {
+          const placeUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lon}&radius=${radius}&type=${type}&language=fr&key=${googleApiKey}`;
+          placePromises.push(
+            sendMessage({ type: 'FETCH_MAPS', url: placeUrl }).then(res => ({ cat, res }))
+          );
+        }
       }
 
-      // Education
-      if (['school', 'kindergarten', 'college', 'university'].includes(tags.amenity)) {
-        addPOI('school');
+      const placeResponses = await Promise.all(placePromises);
+      for (const { cat, res } of placeResponses) {
+        if (res && res.success && res.data && (res.data.status === 'OK' || res.data.status === 'ZERO_RESULTS')) {
+          googlePlacesSucceeded = true;
+          const items = res.data.results || [];
+          for (const item of items) {
+            if (!item.geometry || !item.geometry.location) continue;
+            const elLat = item.geometry.location.lat;
+            const elLon = item.geometry.location.lng;
+            const name = item.name || `id_${item.place_id}`;
+            const dist = getDistanceFromLatLonInMeters(lat, lon, elLat, elLon);
+            const isWithin15 = dist <= 1500;
+            const isWithinCar = isochronePolygon ? isPointInPolygon([elLon, elLat], isochronePolygon) : dist <= 5000;
+            if (!isWithin15 && !isWithinCar) continue;
+            addPOI(cat, name, isWithin15, isWithinCar);
+            if (cat === 'supermarket') {
+              addPOI('shops', name, isWithin15, isWithinCar);
+            }
+          }
+        }
+      }
+    } catch (gpErr) {
+      console.warn('Google Places API error, falling back to Overpass:', gpErr);
+    }
+
+    // Fallback to Overpass API if Google Places did not succeed
+    if (!googlePlacesSucceeded) {
+      statusDiv.textContent = 'Querying Overpass API for POIs...';
+      const query = `
+        [out:json][timeout:25][bbox:${minLat.toFixed(5)},${minLon.toFixed(5)},${maxLat.toFixed(5)},${maxLon.toFixed(5)}];
+        (
+          nwr["railway"~"station|tram_stop|halt"];
+          nwr["highway"="bus_stop"];
+          nwr["public_transport"~"stop_position|platform"];
+          nwr["amenity"~"school|kindergarten|college|university"];
+          nwr["leisure"~"fitness_centre|sports_centre|stadium|pitch|swimming_pool"];
+          nwr["shop"~"supermarket|convenience|bakery|butcher|mall|department_store"];
+        );
+        out tags center;
+      `;
+
+      const overpassUrl = 'https://overpass-api.de/api/interpreter';
+      const overpassResponse = await sendMessage({
+        type: 'FETCH_OVERPASS',
+        url: overpassUrl,
+        body: 'data=' + encodeURIComponent(query)
+      });
+
+      if (!overpassResponse || !overpassResponse.success) {
+        throw new Error(overpassResponse ? overpassResponse.error : 'Overpass query failed');
       }
 
-      // Sports
-      if (['fitness_centre', 'sports_centre', 'stadium', 'pitch', 'swimming_pool'].includes(tags.leisure)) {
-        addPOI('sports');
-      }
+      const elements = overpassResponse.data.elements || [];
+      elements.forEach(el => {
+        const tags = el.tags || {};
+        const name = tags.name || `id_${el.id}`;
+        const elLat = el.lat !== undefined ? el.lat : (el.center ? el.center.lat : null);
+        const elLon = el.lon !== undefined ? el.lon : (el.center ? el.center.lon : null);
+        if (elLat === null || elLon === null) return;
 
-      // Shops
-      if (tags.shop === 'supermarket') {
-        addPOI('supermarket');
-        addPOI('shops');
-      } else if (tags.shop) {
-        addPOI('shops');
-      }
-    });
+        const dist = getDistanceFromLatLonInMeters(lat, lon, elLat, elLon);
+        const isWithin15 = dist <= 1500;
+        const isWithinCar = isochronePolygon ? isPointInPolygon([elLon, elLat], isochronePolygon) : dist <= 5000;
+
+        if (!isWithin15 && !isWithinCar) return;
+
+        if ((tags.railway === 'station' && (tags.station === 'subway' || tags.subway === 'yes')) || (tags.subway === 'yes' && tags.public_transport === 'stop_position')) {
+          addPOI('metro', name, isWithin15, isWithinCar);
+        } else if (tags.railway === 'station' && (tags.station === 'train' || tags.train === 'yes')) {
+          addPOI('rer', name, isWithin15, isWithinCar);
+        } else if (tags.railway === 'tram_stop' || tags.tram === 'yes') {
+          addPOI('tram', name, isWithin15, isWithinCar);
+        } else if (tags.highway === 'bus_stop' || tags.bus === 'yes') {
+          addPOI('bus', name, isWithin15, isWithinCar);
+        }
+
+        if (['school', 'kindergarten', 'college', 'university'].includes(tags.amenity)) {
+          addPOI('school', name, isWithin15, isWithinCar);
+        }
+        if (['fitness_centre', 'sports_centre', 'stadium', 'pitch', 'swimming_pool'].includes(tags.leisure)) {
+          addPOI('sports', name, isWithin15, isWithinCar);
+        }
+        if (tags.shop === 'supermarket') {
+          addPOI('supermarket', name, isWithin15, isWithinCar);
+          addPOI('shops', name, isWithin15, isWithinCar);
+        } else if (tags.shop) {
+          addPOI('shops', name, isWithin15, isWithinCar);
+        }
+      });
+    }
 
     // 5. Update UI for 1.5 km
     document.getElementById('count-metro').textContent = set15.metro.size;
