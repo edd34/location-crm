@@ -5,7 +5,11 @@ This extension allows you to quickly add rental property information to a Notion
 ## Features
 - Automatically grabs the current tab's URL and title.
 - Checks if the URL already exists in your Notion database before adding.
-- Allows inputting price, area, commute times (transit and car), distance, and other property details.
+- Auto-fills listing details using AI (OpenRouter LLM).
+- Calculates commute times (both transit and driving) and driving distance to your workplace using Google Maps.
+- Analyzes neighborhood points of interest across two radii: **1.5 km (walking)** and **10 minutes by car** (using IGN Géoplateforme isochrone and OpenStreetMap Overpass API).
+- Automatically writes a detailed POI breakdown (with names of stations, supermarkets, schools, etc.) directly into the **Notion page description**, and logs summary counts into the `Neighborhood Analysis` property.
+- Full cross-browser compatibility for **Chrome**, **Firefox**, **Edge**, and **Brave** (Manifest V3).
 
 ## Notion Setup
 
@@ -13,6 +17,8 @@ This extension allows you to quickly add rental property information to a Notion
     - Create a new database in Notion (e.g., "Rental Searches").
     - Add the following properties with the EXACT names and types:
         - `Title` (Type: Title)
+        - `Top Pick` (Type: Checkbox)
+        - `Reference` (Type: Text/Rich Text)
         - `Address` (Type: Text/Rich Text)
         - `Price` (Type: Number)
         - `City` (Type: Text/Rich Text)
@@ -31,6 +37,7 @@ This extension allows you to quickly add rental property information to a Notion
         - `Agency Address` (Type: Text/Rich Text)
         - `Phone` (Type: Phone Number)
         - `URL` (Type: URL)
+        - `Neighborhood Analysis` (Type: Text/Rich Text)
         - `Date Added` (Type: Date)
 
 2.  **Create a Notion Integration:**
@@ -72,11 +79,25 @@ This extension allows you to quickly add rental property information to a Notion
     - `https://openrouter.ai/*`
     - `https://maps.googleapis.com/*`
     - `https://overpass-api.de/*`
+    - `https://data.geopf.fr/*`
 
 ## Architecture: CORS & Background Fetching
 
-To comply with modern browser security and avoid CORS issues, this extension uses a **Background Script** architecture:
-- All external API calls (Notion, Google Maps, OpenRouter) are routed through `src/background.js`.
-- The popup sends a message to the background script using `browser.runtime.sendMessage`.
+To comply with modern browser security and avoid CORS issues, this extension uses a **Background Script / Service Worker** architecture:
+- All external API calls (Notion, Google Maps, OpenRouter, Overpass OSM, IGN Géoplateforme) are routed through `src/background.js`.
+- The popup sends a message to the background script using the universal `sendMessage` helper.
 - The background script performs the `fetch` from a privileged context and returns the data.
 - This bypasses CORS restrictions that would otherwise block direct requests from the extension popup.
+
+## Neighborhood Analysis & Points of Interest
+
+When clicking the **🔍 (Analyze Neighborhood)** button:
+1. The address is geocoded using Google Maps Geocoding API.
+2. A **10-minute driving isochrone** polygon is calculated via the French public **IGN Géoplateforme** API (`data.geopf.fr/navigation/isochrone`).
+3. Points of interest are retrieved via **OpenStreetMap Overpass API** within the combined bounding box.
+4. Amenities are categorized and classified into:
+   - **📍 1.5 km Walking Radius** (Haversine distance $\le 1.5\text{ km}$)
+   - **🚗 10-Minute Driving Isochrone** (Point-in-polygon ray-casting)
+5. Upon saving or updating in Notion:
+   - The summary counts are stored in the `Neighborhood Analysis` column.
+   - A structured breakdown detailing the categories, counts, and names of nearby stations, supermarkets, schools, and amenities is written directly into the **Notion page body / description**.

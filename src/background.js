@@ -44,6 +44,15 @@ async function handleMessage(message, sendResponse) {
       const data = await response.json();
       sendResponse({ success: true, data });
     }
+    else if (message.type === 'FETCH_ISOCHRONE') {
+      const response = await fetch(message.url);
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error('Isochrone Error: ' + errText);
+      }
+      const data = await response.json();
+      sendResponse({ success: true, data });
+    }
     else if (message.type === 'FETCH_OVERPASS') {
       const response = await fetch(message.url, {
         method: 'POST',

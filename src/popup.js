@@ -1,12 +1,14 @@
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 let existingPageId = null;
 let cachedDbProperties = null;
+let latestPoiAnalysis = null;
 
 const REQUIRED_ORIGINS = [
   'https://api.notion.com/*',
   'https://openrouter.ai/*',
   'https://maps.googleapis.com/*',
-  'https://overpass-api.de/*'
+  'https://overpass-api.de/*',
+  'https://data.geopf.fr/*'
 ];
 
 function sendMessage(message) {
@@ -348,7 +350,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Include neighborhood analysis if results are visible
     const resultsDiv = document.getElementById('neighborhood-results');
     if (!resultsDiv.classList.contains('hidden')) {
-      const counts = {
+      const counts15 = {
         metro: document.getElementById('count-metro').textContent,
         bus: document.getElementById('count-bus').textContent,
         rer: document.getElementById('count-rer').textContent,
@@ -358,7 +360,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         school: document.getElementById('count-school').textContent,
         sports: document.getElementById('count-sports').textContent
       };
-      data.neighborhood_analysis = `🚇:${counts.metro}, 🚌:${counts.bus}, 🚆:${counts.rer}, 🚋:${counts.tram}, 🛍️:${counts.shops}, 🛒:${counts.supermarket}, 🎓:${counts.school}, 🏋️:${counts.sports}`;
+      const countsCar = {
+        metro: document.getElementById('count-car-metro') ? document.getElementById('count-car-metro').textContent : '0',
+        bus: document.getElementById('count-car-bus') ? document.getElementById('count-car-bus').textContent : '0',
+        rer: document.getElementById('count-car-rer') ? document.getElementById('count-car-rer').textContent : '0',
+        tram: document.getElementById('count-car-tram') ? document.getElementById('count-car-tram').textContent : '0',
+        shops: document.getElementById('count-car-shops') ? document.getElementById('count-car-shops').textContent : '0',
+        supermarket: document.getElementById('count-car-supermarket') ? document.getElementById('count-car-supermarket').textContent : '0',
+        school: document.getElementById('count-car-school') ? document.getElementById('count-car-school').textContent : '0',
+        sports: document.getElementById('count-car-sports') ? document.getElementById('count-car-sports').textContent : '0'
+      };
+      data.neighborhood_analysis = `[1.5km] 🚇:${counts15.metro}, 🚌:${counts15.bus}, 🚆:${counts15.rer}, 🚋:${counts15.tram}, 🛍️:${counts15.shops}, 🛒:${counts15.supermarket}, 🎓:${counts15.school}, 🏋️:${counts15.sports} | [10min 🚗] 🚇:${countsCar.metro}, 🚌:${countsCar.bus}, 🚆:${countsCar.rer}, 🚋:${countsCar.tram}, 🛍️:${countsCar.shops}, 🛒:${countsCar.supermarket}, 🎓:${countsCar.school}, 🏋️:${countsCar.sports}`;
     }
 
     const { apiKey, databaseId } = await browserAPI.storage.local.get(['apiKey', 'databaseId']);
@@ -459,11 +471,10 @@ function populateFormFromNotion(props) {
   if (props['Neighborhood Analysis']) {
     const analysisText = getPropText(props['Neighborhood Analysis']);
     if (analysisText) {
-      const parts = analysisText.split(', ');
       const resultsDiv = document.getElementById('neighborhood-results');
       resultsDiv.classList.remove('hidden');
 
-      const mapping = {
+      const mapping15 = {
         '🚇': 'count-metro',
         '🚌': 'count-bus',
         '🚆': 'count-rer',
@@ -474,13 +485,41 @@ function populateFormFromNotion(props) {
         '🏋️': 'count-sports'
       };
 
-      parts.forEach(part => {
-        const [emoji, countStr] = part.split(':');
-        const elementId = mapping[emoji];
-        if (elementId) {
-          document.getElementById(elementId).textContent = countStr || '0';
-        }
-      });
+      const mappingCar = {
+        '🚇': 'count-car-metro',
+        '🚌': 'count-car-bus',
+        '🚆': 'count-car-rer',
+        '🚋': 'count-car-tram',
+        '🛍️': 'count-car-shops',
+        '🛒': 'count-car-supermarket',
+        '🎓': 'count-car-school',
+        '🏋️': 'count-car-sports'
+      };
+
+      if (analysisText.includes('|')) {
+        const [sec15, secCar] = analysisText.split('|').map(s => s.trim());
+        const parseSection = (sec, mapping) => {
+          sec.split(', ').forEach(part => {
+            const clean = part.replace(/^\[.*?\]\s*/, '');
+            const [emoji, countStr] = clean.split(':');
+            const elementId = mapping[emoji];
+            if (elementId && document.getElementById(elementId)) {
+              document.getElementById(elementId).textContent = countStr || '0';
+            }
+          });
+        };
+        if (sec15) parseSection(sec15, mapping15);
+        if (secCar) parseSection(secCar, mappingCar);
+      } else {
+        // Fallback for legacy single-radius string
+        analysisText.split(', ').forEach(part => {
+          const [emoji, countStr] = part.split(':');
+          const elementId = mapping15[emoji];
+          if (elementId && document.getElementById(elementId)) {
+            document.getElementById(elementId).textContent = countStr || '0';
+          }
+        });
+      }
     }
   }
 
@@ -535,13 +574,102 @@ async function updateInNotion(apiKey, pageId, data, databaseId) {
     properties: buildNotionProperties(data, dbProps)
   };
 
-  return await sendMessage({
+  const updateRes = await sendMessage({
     type: 'FETCH_NOTION',
     url: `https://api.notion.com/v1/pages/${pageId}`,
     method: 'PATCH',
     apiKey: apiKey,
     body: body
   });
+
+  if (updateRes && updateRes.success && latestPoiAnalysis) {
+    const blocks = buildNotionDescriptionBlocks(latestPoiAnalysis);
+    if (blocks.length > 0) {
+      await sendMessage({
+        type: 'FETCH_NOTION',
+        url: `https://api.notion.com/v1/blocks/${pageId}/children`,
+        method: 'PATCH',
+        apiKey: apiKey,
+        body: { children: blocks }
+      });
+    }
+  }
+
+  return updateRes;
+}
+
+function buildNotionDescriptionBlocks(poiAnalysis) {
+  if (!poiAnalysis) return [];
+  const blocks = [];
+
+  blocks.push({
+    object: 'block',
+    type: 'heading_2',
+    heading_2: {
+      rich_text: [{ type: 'text', text: { content: "📍 Analyse du quartier et points d'intérêt" } }]
+    }
+  });
+
+  const categoryLabels = {
+    metro: '🚇 Métro',
+    rer: '🚆 RER / Train',
+    tram: '🚋 Tramway',
+    bus: '🚌 Bus',
+    supermarket: '🛒 Supermarchés',
+    shops: '🛍️ Commerces',
+    school: '🎓 Écoles & Universités',
+    sports: '🏋️ Sport & Loisirs'
+  };
+
+  // Section 1: Rayon de 1,5 km
+  blocks.push({
+    object: 'block',
+    type: 'heading_3',
+    heading_3: {
+      rich_text: [{ type: 'text', text: { content: "📍 Dans un rayon de 1,5 km (à pied)" } }]
+    }
+  });
+
+  for (const [cat, label] of Object.entries(categoryLabels)) {
+    const count = (poiAnalysis.summary1500m && poiAnalysis.summary1500m[cat]) || 0;
+    const names = (poiAnalysis.details1500m && poiAnalysis.details1500m[cat]) ? poiAnalysis.details1500m[cat].slice(0, 10) : [];
+    const content = names.length > 0
+      ? `${label} (${count}) : ${names.join(', ')}${names.length < count ? '...' : ''}`
+      : `${label} : ${count}`;
+    blocks.push({
+      object: 'block',
+      type: 'bulleted_list_item',
+      bulleted_list_item: {
+        rich_text: [{ type: 'text', text: { content } }]
+      }
+    });
+  }
+
+  // Section 2: Rayon de 10 min en voiture
+  blocks.push({
+    object: 'block',
+    type: 'heading_3',
+    heading_3: {
+      rich_text: [{ type: 'text', text: { content: "🚗 Dans un rayon de 10 min en voiture" } }]
+    }
+  });
+
+  for (const [cat, label] of Object.entries(categoryLabels)) {
+    const count = (poiAnalysis.summaryCar && poiAnalysis.summaryCar[cat]) || 0;
+    const names = (poiAnalysis.detailsCar && poiAnalysis.detailsCar[cat]) ? poiAnalysis.detailsCar[cat].slice(0, 10) : [];
+    const content = names.length > 0
+      ? `${label} (${count}) : ${names.join(', ')}${names.length < count ? '...' : ''}`
+      : `${label} : ${count}`;
+    blocks.push({
+      object: 'block',
+      type: 'bulleted_list_item',
+      bulleted_list_item: {
+        rich_text: [{ type: 'text', text: { content } }]
+      }
+    });
+  }
+
+  return blocks;
 }
 
 function buildNotionProperties(data, dbProperties = null) {
@@ -641,6 +769,10 @@ async function addToNotion(apiKey, databaseId, data) {
     parent: { database_id: databaseId },
     properties: properties
   };
+
+  if (latestPoiAnalysis) {
+    body.children = buildNotionDescriptionBlocks(latestPoiAnalysis);
+  }
 
   return await sendMessage({
     type: 'FETCH_NOTION',
@@ -745,6 +877,30 @@ async function calculateTimeToWork(apiKey, origin, destination) {
   }
 }
 
+function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function isPointInPolygon(point, polygon) {
+  const [x, y] = point; // [lon, lat]
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0], yi = polygon[i][1];
+    const xj = polygon[j][0], yj = polygon[j][1];
+    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
 async function analyzeNeighborhood(googleApiKey, address) {
   const statusDiv = document.getElementById('status');
   const resultsDiv = document.getElementById('neighborhood-results');
@@ -765,26 +921,57 @@ async function analyzeNeighborhood(googleApiKey, address) {
     const lon = location.lng;
     console.log(`Geocoding result for "${address}": Lat: ${lat}, Lon: ${lon}`);
 
-    statusDiv.textContent = 'Querying Overpass API (1500m)...';
+    statusDiv.textContent = 'Calculating 10-min driving isochrone...';
 
-    // 2. Query Overpass
-    // Use nwr (node, way, relation) to catch areas, and out tags center to get data for ways/relations
+    // 2. Query IGN Géoplateforme for 10-min car isochrone (600 seconds)
+    let isochronePolygon = null;
+    let minLat = lat - 0.015;
+    let maxLat = lat + 0.015;
+    const cosLat = Math.cos(lat * Math.PI / 180) || 1;
+    let minLon = lon - 0.015 / cosLat;
+    let maxLon = lon + 0.015 / cosLat;
+
+    try {
+      const isoUrl = `https://data.geopf.fr/navigation/isochrone?point=${lon},${lat}&resource=bdtopo-valhalla&costValue=600&costType=time&profile=car`;
+      const isoResponse = await sendMessage({ type: 'FETCH_ISOCHRONE', url: isoUrl });
+      if (isoResponse && isoResponse.success && isoResponse.data && isoResponse.data.geometry) {
+        const geom = isoResponse.data.geometry;
+        isochronePolygon = geom.type === 'Polygon' ? geom.coordinates[0] : geom.coordinates[0][0];
+
+        // Compute bbox of polygon
+        for (const pt of isochronePolygon) {
+          const ptLon = pt[0];
+          const ptLat = pt[1];
+          if (ptLat < minLat) minLat = ptLat;
+          if (ptLat > maxLat) maxLat = ptLat;
+          if (ptLon < minLon) minLon = ptLon;
+          if (ptLon > maxLon) maxLon = ptLon;
+        }
+      }
+    } catch (isoErr) {
+      console.warn('Isochrone API unavailable or out of bounds, using default radius fallback:', isoErr);
+    }
+
+    // Fallback if isochrone polygon not obtained (e.g. outside France): default to ~5km driving radius
+    if (!isochronePolygon) {
+      minLat = lat - 0.045;
+      maxLat = lat + 0.045;
+      minLon = lon - 0.045 / cosLat;
+      maxLon = lon + 0.045 / cosLat;
+    }
+
+    statusDiv.textContent = 'Querying Overpass API for POIs...';
+
+    // 3. Query Overpass with bounding box
     const query = `
-      [out:json][timeout:60];
+      [out:json][timeout:60][bbox:${minLat.toFixed(5)},${minLon.toFixed(5)},${maxLat.toFixed(5)},${maxLon.toFixed(5)}];
       (
-        // Transport
-        nwr["railway"~"station|tram_stop|halt"](around:1500, ${lat}, ${lon});
-        nwr["highway"="bus_stop"](around:1500, ${lat}, ${lon});
-        nwr["public_transport"~"stop_position|platform"](around:1500, ${lat}, ${lon});
-        
-        // Education
-        nwr["amenity"~"school|kindergarten|college|university"](around:1500, ${lat}, ${lon});
-        
-        // Sports & Leisure
-        nwr["leisure"~"fitness_centre|sports_centre|stadium|pitch|swimming_pool"](around:1500, ${lat}, ${lon});
-        
-        // Shopping
-        nwr["shop"~"supermarket|convenience|bakery|butcher|mall|department_store"](around:1500, ${lat}, ${lon});
+        nwr["railway"~"station|tram_stop|halt"];
+        nwr["highway"="bus_stop"];
+        nwr["public_transport"~"stop_position|platform"];
+        nwr["amenity"~"school|kindergarten|college|university"];
+        nwr["leisure"~"fitness_centre|sports_centre|stadium|pitch|swimming_pool"];
+        nwr["shop"~"supermarket|convenience|bakery|butcher|mall|department_store"];
       );
       out tags center;
     `;
@@ -802,68 +989,151 @@ async function analyzeNeighborhood(googleApiKey, address) {
 
     const elements = overpassResponse.data.elements;
 
-    // 3. Process results with deduplication for stations
-    const uniqueMetro = new Set();
-    const uniqueRer = new Set();
-    const uniqueTram = new Set();
-    const uniqueBus = new Set();
-    const uniqueSchools = new Set();
-    const uniqueSports = new Set();
-    const uniqueSupermarkets = new Set();
-    const uniqueShops = new Set();
+    // 4. Process results for both 1.5 km (walking) and 10 min (car)
+    const set15 = {
+      metro: new Set(),
+      rer: new Set(),
+      tram: new Set(),
+      bus: new Set(),
+      school: new Set(),
+      sports: new Set(),
+      supermarket: new Set(),
+      shops: new Set()
+    };
+
+    const setCar = {
+      metro: new Set(),
+      rer: new Set(),
+      tram: new Set(),
+      bus: new Set(),
+      school: new Set(),
+      sports: new Set(),
+      supermarket: new Set(),
+      shops: new Set()
+    };
 
     elements.forEach(el => {
       const tags = el.tags || {};
       const name = tags.name || `id_${el.id}`;
+      const elLat = el.lat !== undefined ? el.lat : (el.center ? el.center.lat : null);
+      const elLon = el.lon !== undefined ? el.lon : (el.center ? el.center.lon : null);
+      if (elLat === null || elLon === null) return;
+
+      const dist = getDistanceFromLatLonInMeters(lat, lon, elLat, elLon);
+      const isWithin15 = dist <= 1500;
+      const isWithinCar = isochronePolygon ? isPointInPolygon([elLon, elLat], isochronePolygon) : dist <= 5000;
+
+      if (!isWithin15 && !isWithinCar) return;
+
+      const addPOI = (category) => {
+        if (isWithin15) set15[category].add(name);
+        if (isWithinCar) setCar[category].add(name);
+      };
 
       // Metro logic
       if ((tags.railway === 'station' && (tags.station === 'subway' || tags.subway === 'yes')) || (tags.subway === 'yes' && tags.public_transport === 'stop_position')) {
-        uniqueMetro.add(name);
+        addPOI('metro');
       }
       // RER / Train logic
       else if (tags.railway === 'station' && (tags.station === 'train' || tags.train === 'yes')) {
-        uniqueRer.add(name);
+        addPOI('rer');
       }
       // Tram logic
       else if (tags.railway === 'tram_stop' || tags.tram === 'yes') {
-        uniqueTram.add(name);
+        addPOI('tram');
       }
       // Bus logic
       else if (tags.highway === 'bus_stop' || tags.bus === 'yes') {
-        uniqueBus.add(name);
+        addPOI('bus');
       }
 
       // Education
       if (['school', 'kindergarten', 'college', 'university'].includes(tags.amenity)) {
-        uniqueSchools.add(name);
+        addPOI('school');
       }
 
       // Sports
       if (['fitness_centre', 'sports_centre', 'stadium', 'pitch', 'swimming_pool'].includes(tags.leisure)) {
-        uniqueSports.add(name);
+        addPOI('sports');
       }
 
       // Shops
       if (tags.shop === 'supermarket') {
-        uniqueSupermarkets.add(name);
-        uniqueShops.add(name);
+        addPOI('supermarket');
+        addPOI('shops');
       } else if (tags.shop) {
-        uniqueShops.add(name);
+        addPOI('shops');
       }
     });
 
-    // Update UI
-    document.getElementById('count-metro').textContent = uniqueMetro.size;
-    document.getElementById('count-bus').textContent = uniqueBus.size;
-    document.getElementById('count-rer').textContent = uniqueRer.size;
-    document.getElementById('count-tram').textContent = uniqueTram.size;
-    document.getElementById('count-school').textContent = uniqueSchools.size;
-    document.getElementById('count-sports').textContent = uniqueSports.size;
-    document.getElementById('count-supermarket').textContent = uniqueSupermarkets.size;
-    document.getElementById('count-shops').textContent = uniqueShops.size;
+    // 5. Update UI for 1.5 km
+    document.getElementById('count-metro').textContent = set15.metro.size;
+    document.getElementById('count-bus').textContent = set15.bus.size;
+    document.getElementById('count-rer').textContent = set15.rer.size;
+    document.getElementById('count-tram').textContent = set15.tram.size;
+    document.getElementById('count-school').textContent = set15.school.size;
+    document.getElementById('count-sports').textContent = set15.sports.size;
+    document.getElementById('count-supermarket').textContent = set15.supermarket.size;
+    document.getElementById('count-shops').textContent = set15.shops.size;
+
+    // 6. Update UI for 10 min car
+    if (document.getElementById('count-car-metro')) {
+      document.getElementById('count-car-metro').textContent = setCar.metro.size;
+      document.getElementById('count-car-bus').textContent = setCar.bus.size;
+      document.getElementById('count-car-rer').textContent = setCar.rer.size;
+      document.getElementById('count-car-tram').textContent = setCar.tram.size;
+      document.getElementById('count-car-school').textContent = setCar.school.size;
+      document.getElementById('count-car-sports').textContent = setCar.sports.size;
+      document.getElementById('count-car-supermarket').textContent = setCar.supermarket.size;
+      document.getElementById('count-car-shops').textContent = setCar.shops.size;
+    }
+
+    // 7. Store structured POI details for Notion page description
+    latestPoiAnalysis = {
+      summary1500m: {
+        metro: set15.metro.size,
+        bus: set15.bus.size,
+        rer: set15.rer.size,
+        tram: set15.tram.size,
+        school: set15.school.size,
+        sports: set15.sports.size,
+        supermarket: set15.supermarket.size,
+        shops: set15.shops.size
+      },
+      summaryCar: {
+        metro: setCar.metro.size,
+        bus: setCar.bus.size,
+        rer: setCar.rer.size,
+        tram: setCar.tram.size,
+        school: setCar.school.size,
+        sports: setCar.sports.size,
+        supermarket: setCar.supermarket.size,
+        shops: setCar.shops.size
+      },
+      details1500m: {
+        metro: Array.from(set15.metro).filter(n => !n.startsWith('id_')),
+        rer: Array.from(set15.rer).filter(n => !n.startsWith('id_')),
+        tram: Array.from(set15.tram).filter(n => !n.startsWith('id_')),
+        bus: Array.from(set15.bus).filter(n => !n.startsWith('id_')),
+        school: Array.from(set15.school).filter(n => !n.startsWith('id_')),
+        sports: Array.from(set15.sports).filter(n => !n.startsWith('id_')),
+        supermarket: Array.from(set15.supermarket).filter(n => !n.startsWith('id_')),
+        shops: Array.from(set15.shops).filter(n => !n.startsWith('id_'))
+      },
+      detailsCar: {
+        metro: Array.from(setCar.metro).filter(n => !n.startsWith('id_')),
+        rer: Array.from(setCar.rer).filter(n => !n.startsWith('id_')),
+        tram: Array.from(setCar.tram).filter(n => !n.startsWith('id_')),
+        bus: Array.from(setCar.bus).filter(n => !n.startsWith('id_')),
+        school: Array.from(setCar.school).filter(n => !n.startsWith('id_')),
+        sports: Array.from(setCar.sports).filter(n => !n.startsWith('id_')),
+        supermarket: Array.from(setCar.supermarket).filter(n => !n.startsWith('id_')),
+        shops: Array.from(setCar.shops).filter(n => !n.startsWith('id_'))
+      }
+    };
 
     resultsDiv.classList.remove('hidden');
-    statusDiv.textContent = 'Neighborhood analysis complete!';
+    statusDiv.textContent = 'Neighborhood analysis complete (1.5km & 10min car)!';
     statusDiv.style.color = 'green';
 
   } catch (error) {

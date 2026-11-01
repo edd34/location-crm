@@ -12,7 +12,8 @@
     "https://api.notion.com/*",
     "https://openrouter.ai/*",
     "https://maps.googleapis.com/*",
-    "https://overpass-api.de/*"
+    "https://overpass-api.de/*",
+    "https://data.geopf.fr/*"
   ],
   "background": {
     "service_worker": "background.js",

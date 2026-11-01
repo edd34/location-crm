@@ -192,6 +192,23 @@ button[type="submit"].update-mode:hover {
   display: none;
 }
 
+.radius-section {
+  margin-bottom: 10px;
+}
+
+.radius-section:last-child {
+  margin-bottom: 0;
+  padding-top: 8px;
+  border-top: 1px dashed #ccc;
+}
+
+.radius-title {
+  font-weight: 600;
+  font-size: 11px;
+  color: #444;
+  margin-bottom: 6px;
+}
+
 .results-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -46,7 +46,7 @@ Your Notion database **must** have the following properties (columns) with the e
 | **Has Parking** | Status | (Yes, No, Unknown) |
 | **Has Cave** | Status | (Yes, No, Unknown) |
 | **Furnished** | Status | (Yes, No, Unknown) |
-| **Neighborhood Analysis**| Text | Summary of nearby amenities |
+| **Neighborhood Analysis**| Text | Summary of nearby amenities (1.5km & 10min car) |
 | **Date Added** | Date | Automatically set when created |
 
 ---
@@ -70,7 +70,7 @@ Click the **Settings (⚙️)** icon in the extension popup to enter your keys:
 3.  **✨ AI Fill**: Click this button. The AI will read the page and automatically fill in the price, area, address, reference, etc.
 4.  **Top Pick (❤️)**: Click the heart if it's a property you really love.
 5.  **Check travel time**: It calculates the commute to your "Work Address" automatically (transit time & lines, car travel time, and distance in km).
-6.  **🔍 Analyze Neighborhood**: Click the magnifying glass to see how many metros, buses, and shops are within 1.5km (powered by OpenStreetMap).
+6.  **🔍 Analyze Neighborhood**: Click the magnifying glass to analyze points of interest within **1.5km (walking)** and **10 minutes by car** (powered by IGN isochrone & OpenStreetMap). Detailed lists and radii are automatically added to the Notion page description upon saving.
 7.  **Add to Notion**: Click the blue button. If the property was already saved, the button will turn green and say **"Update in Notion"**.
 
 ---
