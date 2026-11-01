@@ -1,6 +1,6 @@
-# Notion Rent Tracker Firefox Extension
+# Notion Rent Tracker Browser Extension (Chrome & Firefox)
 
-This extension allows you to quickly add rental property information to a Notion database.
+This extension allows you to quickly add rental property information to a Notion database from any tab on Chrome, Firefox, Edge, and Brave.
 
 ## Features
 - Automatically grabs the current tab's URL and title.
@@ -45,26 +45,33 @@ This extension allows you to quickly add rental property information to a Notion
     - The Database ID is the part of the URL after the workspace name and before the `?v=...`.
     - Example: `https://www.notion.so/myworkspace/a8aec43384f447ed84390e6e42c2e089?v=...` -> ID is `a8aec43384f447ed84390e6e42c2e089`.
 
-## Installation (Firefox)
+## Installation
 
+### Chrome / Chromium / Edge / Brave
+1.  Open `chrome://extensions` (or `edge://extensions` / `brave://extensions`).
+2.  Enable **"Developer mode"** (top right toggle).
+3.  Click **"Load unpacked"** and select the `src/` folder of this project.
+4.  The extension should now appear in your extensions list.
+5.  Click the extension icon, go to Settings (gear icon), and enter your keys and database ID.
+
+### Firefox
 1.  Open Firefox and go to `about:debugging`.
-2.  Click "This Firefox".
-3.  Click "Load Temporary Add-on...".
+2.  Click **"This Firefox"**.
+3.  Click **"Load Temporary Add-on..."**.
 4.  Navigate to this project's `src` folder and select `manifest.json`.
 5.  The extension should now appear in your extensions list.
 6.  Click the extension icon, go to Settings (gear icon), and enter your **Notion API Key** and **Database ID**.
 
-## Permissions (CRITICAL for Firefox)
+## Permissions (Host Permissions)
 
-In Firefox Manifest V3, host permissions are **optional by default**. To avoid "Cross-Origin Request Blocked" (CORS) errors, you **must** manually enable them:
-
-1.  Go to `about:addons` in Firefox.
-2.  Find **Notion Rent Tracker** and click on it.
-3.  Go to the **Permissions** tab.
-4.  Toggle **ON** the permissions for:
+- **Chrome / Edge / Brave**: Host permissions are automatically granted upon installation.
+- **Firefox MV3**: Host permissions are optional by default. You can:
+  - Click the **"Grant"** button on the yellow banner that appears in the extension popup when permissions are missing, OR
+  - Go to `about:addons` > **Notion Rent Tracker** > **Permissions** tab and toggle them **ON** for:
     - `https://api.notion.com/*`
-    - `https://maps.googleapis.com/*`
     - `https://openrouter.ai/*`
+    - `https://maps.googleapis.com/*`
+    - `https://overpass-api.de/*`
 
 ## Architecture: CORS & Background Fetching
 

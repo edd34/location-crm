@@ -76,6 +76,7 @@ Click the **Settings (⚙️)** icon in the extension popup to enter your keys:
 ---
 
 ## 💡 Pro Tips
+- If you use Firefox and see a yellow permission warning in the popup, click **"Grant"** to authorize external API connections in one click.
 - The extension checks the URL automatically. If you've already saved a listing, it will load your existing notes from Notion so you don't create duplicates.
 - You can manually edit any field before saving.
 - For AI Fill to work best, wait for the webpage to be fully loaded.

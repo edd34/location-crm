@@ -17,6 +17,39 @@ header {
   gap: 8px;
 }
 
+#permissions-banner {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+#permissions-banner.hidden {
+  display: none;
+}
+
+#grant-permissions-btn {
+  background-color: #856404;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#grant-permissions-btn:hover {
+  background-color: #533f03;
+}
+
 #magic-fill {
   background-color: #6200ee;
   color: white;

@@ -2,6 +2,28 @@ const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 let existingPageId = null;
 let cachedDbProperties = null;
 
+const REQUIRED_ORIGINS = [
+  'https://api.notion.com/*',
+  'https://openrouter.ai/*',
+  'https://maps.googleapis.com/*',
+  'https://overpass-api.de/*'
+];
+
+function sendMessage(message) {
+  if (typeof browser !== 'undefined' && browser.runtime && typeof browser.runtime.sendMessage === 'function') {
+    return browser.runtime.sendMessage(message).catch(err => ({ success: false, error: err.message || String(err) }));
+  }
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        resolve(response);
+      }
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const form = document.getElementById('rent-form');
   const settingsBtn = document.getElementById('settings-btn');
@@ -14,6 +36,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const referenceInput = document.getElementById('reference');
   const magicFillBtn = document.getElementById('magic-fill');
   const addBtn = document.getElementById('add-btn');
+  const permissionsBanner = document.getElementById('permissions-banner');
+  const grantPermissionsBtn = document.getElementById('grant-permissions-btn');
 
   // Load Config
   const savedConfig = await browserAPI.storage.local.get(['apiKey', 'databaseId', 'openRouterApiKey', 'llmUrl', 'llmModel', 'userPhone', 'googleApiKey', 'workAddress']);
@@ -87,18 +111,54 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Check for host permissions (especially important for Firefox MV3 where they are optional)
   const checkPermissions = async () => {
-    if (typeof browser !== 'undefined' && browser.permissions) {
-      const hasPermissions = await browser.permissions.contains({
-        origins: ['https://maps.googleapis.com/*', 'https://api.notion.com/*']
-      });
-      if (!hasPermissions) {
-        statusDiv.textContent = 'Note: Please enable host permissions in extension settings for Maps/Notion to work.';
-        statusDiv.style.color = 'orange';
-        setTimeout(() => { if (statusDiv.style.color === 'orange') statusDiv.textContent = ''; }, 5000);
+    const permissionsAPI = (typeof browser !== 'undefined' && browser.permissions) ? browser.permissions : (typeof chrome !== 'undefined' && chrome.permissions ? chrome.permissions : null);
+    if (permissionsAPI && permissionsAPI.contains) {
+      try {
+        const hasPermissions = await new Promise((resolve) => {
+          const res = permissionsAPI.contains({ origins: REQUIRED_ORIGINS }, (has) => {
+            if (typeof has !== 'undefined') resolve(has);
+          });
+          if (res && typeof res.then === 'function') {
+            res.then(resolve).catch(() => resolve(true));
+          }
+        });
+        if (!hasPermissions && permissionsBanner) {
+          permissionsBanner.classList.remove('hidden');
+        } else if (permissionsBanner) {
+          permissionsBanner.classList.add('hidden');
+        }
+      } catch (e) {
+        console.warn('Could not check permissions', e);
       }
     }
   };
   checkPermissions();
+
+  if (grantPermissionsBtn) {
+    grantPermissionsBtn.addEventListener('click', async () => {
+      const permissionsAPI = (typeof browser !== 'undefined' && browser.permissions) ? browser.permissions : (typeof chrome !== 'undefined' && chrome.permissions ? chrome.permissions : null);
+      if (permissionsAPI && permissionsAPI.request) {
+        try {
+          const granted = await new Promise((resolve) => {
+            const res = permissionsAPI.request({ origins: REQUIRED_ORIGINS }, (result) => {
+              if (typeof result !== 'undefined') resolve(result);
+            });
+            if (res && typeof res.then === 'function') {
+              res.then(resolve).catch(() => resolve(false));
+            }
+          });
+          if (granted) {
+            if (permissionsBanner) permissionsBanner.classList.add('hidden');
+            statusDiv.textContent = 'Permissions granted!';
+            statusDiv.style.color = 'green';
+            setTimeout(() => { statusDiv.textContent = ''; }, 3000);
+          }
+        } catch (err) {
+          console.error('Permission request failed:', err);
+        }
+      }
+    });
+  }
 
   magicFillBtn.addEventListener('click', async () => {
     const { openRouterApiKey, llmUrl, llmModel, userPhone, googleApiKey, workAddress } = await browserAPI.storage.local.get(['openRouterApiKey', 'llmUrl', 'llmModel', 'userPhone', 'googleApiKey', 'workAddress']);
@@ -159,7 +219,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       ${pageText}`;
 
       // Use background script to bypass CORS
-      browserAPI.runtime.sendMessage({
+      const response = await sendMessage({
         type: 'FETCH_LLM',
         url: url,
         openRouterApiKey: openRouterApiKey,
@@ -168,65 +228,65 @@ document.addEventListener('DOMContentLoaded', async () => {
           messages: [{ role: 'user', content: prompt }],
           response_format: { type: 'json_object' }
         }
-      }, (response) => {
-        if (!response || !response.success) {
-          statusDiv.textContent = 'AI Fill Error: ' + (response ? response.error : 'No response from background');
-          statusDiv.style.color = 'red';
-          return;
-        }
-
-        let extracted;
-        try {
-          const content = response.data.choices[0].message.content;
-          extracted = JSON.parse(content);
-        } catch (e) {
-          statusDiv.textContent = 'Error parsing AI response';
-          statusDiv.style.color = 'red';
-          console.error("AI Response Parse Error:", e, response.data);
-          return;
-        }
-
-        // Fill form
-        if (extracted.title) titleInput.value = extracted.title;
-        if (extracted.reference) referenceInput.value = extracted.reference;
-        if (extracted.address) addressInput.value = extracted.address;
-        if (extracted.city) document.getElementById('city').value = extracted.city;
-        if (extracted.postal_code) document.getElementById('postal_code').value = extracted.postal_code;
-        if (extracted.neighborhood) document.getElementById('neighborhood').value = extracted.neighborhood;
-        if (extracted.price) document.getElementById('price').value = parseInt(extracted.price);
-        if (extracted.area) document.getElementById('area').value = parseInt(extracted.area);
-        if (extracted.time_to_work) document.getElementById('time_to_work').value = extracted.time_to_work;
-
-        // Handle Tri-state selects
-        const setTriState = (id, val) => {
-          const el = document.getElementById(id);
-          if (val === true) el.value = 'true';
-          else if (val === false) el.value = 'false';
-          else el.value = 'unknown';
-        };
-        setTriState('has_parking', extracted.has_parking);
-        setTriState('has_cave', extracted.has_cave);
-        setTriState('is_furnished', extracted.is_furnished);
-
-        if (extracted.agency) document.getElementById('agency').value = extracted.agency;
-        if (extracted.agency_address) document.getElementById('agency_address').value = extracted.agency_address;
-        if (extracted.phone) document.getElementById('phone').value = extracted.phone;
-
-        // Auto-calculate time to work if enough info is found
-        if ((extracted.address || extracted.city) && googleApiKey && workAddress) {
-          const parts = [
-            extracted.address,
-            extracted.neighborhood,
-            extracted.city,
-            extracted.postal_code
-          ].filter(Boolean);
-          const origin = parts.join(', ');
-          calculateTimeToWork(googleApiKey, origin, workAddress);
-        } else {
-          statusDiv.textContent = 'AI Fill complete!';
-          statusDiv.style.color = 'green';
-        }
       });
+
+      if (!response || !response.success) {
+        statusDiv.textContent = 'AI Fill Error: ' + (response ? response.error : 'No response from background');
+        statusDiv.style.color = 'red';
+        return;
+      }
+
+      let extracted;
+      try {
+        const content = response.data.choices[0].message.content;
+        extracted = JSON.parse(content);
+      } catch (e) {
+        statusDiv.textContent = 'Error parsing AI response';
+        statusDiv.style.color = 'red';
+        console.error("AI Response Parse Error:", e, response.data);
+        return;
+      }
+
+      // Fill form
+      if (extracted.title) titleInput.value = extracted.title;
+      if (extracted.reference) referenceInput.value = extracted.reference;
+      if (extracted.address) addressInput.value = extracted.address;
+      if (extracted.city) document.getElementById('city').value = extracted.city;
+      if (extracted.postal_code) document.getElementById('postal_code').value = extracted.postal_code;
+      if (extracted.neighborhood) document.getElementById('neighborhood').value = extracted.neighborhood;
+      if (extracted.price) document.getElementById('price').value = parseInt(extracted.price);
+      if (extracted.area) document.getElementById('area').value = parseInt(extracted.area);
+      if (extracted.time_to_work) document.getElementById('time_to_work').value = extracted.time_to_work;
+
+      // Handle Tri-state selects
+      const setTriState = (id, val) => {
+        const el = document.getElementById(id);
+        if (val === true) el.value = 'true';
+        else if (val === false) el.value = 'false';
+        else el.value = 'unknown';
+      };
+      setTriState('has_parking', extracted.has_parking);
+      setTriState('has_cave', extracted.has_cave);
+      setTriState('is_furnished', extracted.is_furnished);
+
+      if (extracted.agency) document.getElementById('agency').value = extracted.agency;
+      if (extracted.agency_address) document.getElementById('agency_address').value = extracted.agency_address;
+      if (extracted.phone) document.getElementById('phone').value = extracted.phone;
+
+      // Auto-calculate time to work if enough info is found
+      if ((extracted.address || extracted.city) && googleApiKey && workAddress) {
+        const parts = [
+          extracted.address,
+          extracted.neighborhood,
+          extracted.city,
+          extracted.postal_code
+        ].filter(Boolean);
+        const origin = parts.join(', ');
+        calculateTimeToWork(googleApiKey, origin, workAddress);
+      } else {
+        statusDiv.textContent = 'AI Fill complete!';
+        statusDiv.style.color = 'green';
+      }
     } catch (error) {
       statusDiv.textContent = 'AI Fill Error: ' + error.message;
       statusDiv.style.color = 'red';
@@ -349,29 +409,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function fetchPageByUrl(apiKey, databaseId, url) {
-  return new Promise((resolve, reject) => {
-    browserAPI.runtime.sendMessage({
-      type: 'FETCH_NOTION',
-      url: `https://api.notion.com/v1/databases/${databaseId}/query`,
-      method: 'POST',
-      apiKey: apiKey,
-      body: {
-        filter: {
-          property: 'URL',
-          url: {
-            equals: url
-          }
+  const response = await sendMessage({
+    type: 'FETCH_NOTION',
+    url: `https://api.notion.com/v1/databases/${databaseId}/query`,
+    method: 'POST',
+    apiKey: apiKey,
+    body: {
+      filter: {
+        property: 'URL',
+        url: {
+          equals: url
         }
       }
-    }, (response) => {
-      if (response && response.success) {
-        resolve(response.data.results.length > 0 ? response.data.results[0] : null);
-      } else {
-        console.error("fetchPageByUrl error:", response ? response.error : 'No response');
-        reject(new Error(response ? response.error : 'Failed to check Notion database'));
-      }
-    });
+    }
   });
+
+  if (response && response.success) {
+    return response.data.results.length > 0 ? response.data.results[0] : null;
+  } else {
+    console.error("fetchPageByUrl error:", response ? response.error : 'No response');
+    throw new Error(response ? response.error : 'Failed to check Notion database');
+  }
 }
 
 function populateFormFromNotion(props) {
@@ -457,21 +515,18 @@ function populateFormFromNotion(props) {
 
 async function getDatabaseProperties(apiKey, databaseId) {
   if (cachedDbProperties) return cachedDbProperties;
-  return new Promise((resolve) => {
-    browserAPI.runtime.sendMessage({
-      type: 'FETCH_NOTION',
-      url: `https://api.notion.com/v1/databases/${databaseId}`,
-      method: 'GET',
-      apiKey: apiKey
-    }, (response) => {
-      if (response && response.success && response.data && response.data.properties) {
-        cachedDbProperties = response.data.properties;
-        resolve(cachedDbProperties);
-      } else {
-        resolve(null);
-      }
-    });
+  const response = await sendMessage({
+    type: 'FETCH_NOTION',
+    url: `https://api.notion.com/v1/databases/${databaseId}`,
+    method: 'GET',
+    apiKey: apiKey
   });
+
+  if (response && response.success && response.data && response.data.properties) {
+    cachedDbProperties = response.data.properties;
+    return cachedDbProperties;
+  }
+  return null;
 }
 
 async function updateInNotion(apiKey, pageId, data, databaseId) {
@@ -480,16 +535,12 @@ async function updateInNotion(apiKey, pageId, data, databaseId) {
     properties: buildNotionProperties(data, dbProps)
   };
 
-  return new Promise((resolve) => {
-    browserAPI.runtime.sendMessage({
-      type: 'FETCH_NOTION',
-      url: `https://api.notion.com/v1/pages/${pageId}`,
-      method: 'PATCH',
-      apiKey: apiKey,
-      body: body
-    }, (response) => {
-      resolve(response);
-    });
+  return await sendMessage({
+    type: 'FETCH_NOTION',
+    url: `https://api.notion.com/v1/pages/${pageId}`,
+    method: 'PATCH',
+    apiKey: apiKey,
+    body: body
   });
 }
 
@@ -591,16 +642,12 @@ async function addToNotion(apiKey, databaseId, data) {
     properties: properties
   };
 
-  return new Promise((resolve) => {
-    browserAPI.runtime.sendMessage({
-      type: 'FETCH_NOTION',
-      url: 'https://api.notion.com/v1/pages',
-      method: 'POST',
-      apiKey: apiKey,
-      body: body
-    }, (response) => {
-      resolve(response);
-    });
+  return await sendMessage({
+    type: 'FETCH_NOTION',
+    url: 'https://api.notion.com/v1/pages',
+    method: 'POST',
+    apiKey: apiKey,
+    body: body
   });
 }
 
@@ -622,14 +669,7 @@ async function calculateTimeToWork(apiKey, origin, destination) {
   const transitUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&arrival_time=${targetTime}&mode=transit&language=fr&key=${apiKey}&transit_mode=rail`;
   const drivingUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&departure_time=${targetTime}&mode=driving&language=fr&key=${apiKey}`;
 
-  const fetchPromise = (url) => new Promise((resolve) => {
-    browserAPI.runtime.sendMessage({
-      type: 'FETCH_MAPS',
-      url: url
-    }, (response) => {
-      resolve(response);
-    });
-  });
+  const fetchPromise = (url) => sendMessage({ type: 'FETCH_MAPS', url });
 
   try {
     const [transitResponse, drivingResponse] = await Promise.all([
@@ -714,9 +754,7 @@ async function analyzeNeighborhood(googleApiKey, address) {
   try {
     // 1. Geocode address to get coordinates
     const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${googleApiKey}`;
-    const geoResponse = await new Promise(resolve => {
-      browserAPI.runtime.sendMessage({ type: 'FETCH_MAPS', url: geoUrl }, resolve);
-    });
+    const geoResponse = await sendMessage({ type: 'FETCH_MAPS', url: geoUrl });
 
     if (!geoResponse || !geoResponse.success || geoResponse.data.status !== 'OK') {
       throw new Error('Geocoding failed');
@@ -752,12 +790,10 @@ async function analyzeNeighborhood(googleApiKey, address) {
     `;
 
     const overpassUrl = 'https://overpass-api.de/api/interpreter';
-    const overpassResponse = await new Promise(resolve => {
-      browserAPI.runtime.sendMessage({
-        type: 'FETCH_OVERPASS',
-        url: overpassUrl,
-        body: 'data=' + encodeURIComponent(query)
-      }, resolve);
+    const overpassResponse = await sendMessage({
+      type: 'FETCH_OVERPASS',
+      url: overpassUrl,
+      body: 'data=' + encodeURIComponent(query)
     });
 
     if (!overpassResponse || !overpassResponse.success) {
