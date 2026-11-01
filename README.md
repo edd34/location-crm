@@ -5,7 +5,7 @@ This extension allows you to quickly add rental property information to a Notion
 ## Features
 - Automatically grabs the current tab's URL and title.
 - Checks if the URL already exists in your Notion database before adding.
-- Allows inputting price, area, time to work, and other property details.
+- Allows inputting price, area, commute times (transit and car), distance, and other property details.
 
 ## Notion Setup
 
@@ -20,6 +20,8 @@ This extension allows you to quickly add rental property information to a Notion
         - `Neighborhood` (Type: Text/Rich Text)
         - `Time to Work` (Type: Number)
         - `Transit Lines` (Type: Multi-select)
+        - `Time to Work (Car)` (Type: Number)
+        - `Distance to Work` (Type: Number)
         - `Area` (Type: Number)
         - `Has Parking` (Type: Status) - Options: "Yes", "No", "Unknown"
         - `Has Cave` (Type: Status) - Options: "Yes", "No", "Unknown"

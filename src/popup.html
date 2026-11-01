@@ -70,7 +70,7 @@
         <input type="number" id="price" name="price" required>
       </div>
       <div class="field">
-        <label for="time_to_work">Time to work (min):</label>
+        <label for="time_to_work">Time to work (Transit) (min):</label>
         <div class="input-with-action">
           <input type="number" id="time_to_work" name="time_to_work">
           <button type="button" id="refresh-time" title="Refresh travel time">🔄</button>
@@ -81,6 +81,16 @@
         <div class="input-with-action">
           <input type="text" id="transit_lines" name="transit_lines" placeholder="e.g. RER A, Bus 123">
           <button type="button" id="analyze-neighborhood" title="Analyze Neighborhood (Overpass)">🔍</button>
+        </div>
+      </div>
+      <div class="two-col-group">
+        <div class="field">
+          <label for="time_to_work_car">Car Time (min):</label>
+          <input type="number" id="time_to_work_car" name="time_to_work_car">
+        </div>
+        <div class="field">
+          <label for="distance_to_work">Distance (km):</label>
+          <input type="number" id="distance_to_work" name="distance_to_work" step="0.1">
         </div>
       </div>
       <div id="neighborhood-results" class="hidden">

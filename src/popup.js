@@ -1,5 +1,6 @@
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 let existingPageId = null;
+let cachedDbProperties = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   const form = document.getElementById('rent-form');
@@ -40,6 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Check if this URL already exists in Notion
       if (savedConfig.apiKey && savedConfig.databaseId) {
+        getDatabaseProperties(savedConfig.apiKey, savedConfig.databaseId).catch(() => {});
         statusDiv.textContent = 'Checking Notion...';
         const existingPage = await fetchPageByUrl(savedConfig.apiKey, savedConfig.databaseId, tab.url);
         if (existingPage) {
@@ -313,7 +315,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (existingPageId) {
         statusDiv.textContent = 'Updating in Notion...';
         statusDiv.style.color = 'blue';
-        result = await updateInNotion(apiKey, existingPageId, data);
+        result = await updateInNotion(apiKey, existingPageId, data, databaseId);
       } else {
         statusDiv.textContent = 'Adding to Notion...';
         statusDiv.style.color = 'blue';
@@ -428,6 +430,13 @@ function populateFormFromNotion(props) {
   if (props['Area']) document.getElementById('area').value = getPropNumber(props['Area']);
   if (props['Time to Work']) document.getElementById('time_to_work').value = getPropNumber(props['Time to Work']);
   if (props['Transit Lines']) document.getElementById('transit_lines').value = getPropMultiSelect(props['Transit Lines']);
+
+  const carTimeProp = props['Time to Work (Car)'] || props['Car Time to Work'];
+  if (carTimeProp) document.getElementById('time_to_work_car').value = getPropNumber(carTimeProp);
+
+  const distanceProp = props['Distance to Work'] || props['Distance to Work (km)'] || props['Distance'];
+  if (distanceProp) document.getElementById('distance_to_work').value = getPropNumber(distanceProp);
+
   if (props['Agency']) document.getElementById('agency').value = getPropText(props['Agency']);
   if (props['Agency Address']) document.getElementById('agency_address').value = getPropText(props['Agency Address']);
   if (props['Phone']) document.getElementById('phone').value = getPropPhone(props['Phone']);
@@ -446,9 +455,29 @@ function populateFormFromNotion(props) {
   if (props['Furnished']) setTriState('is_furnished', 'Furnished');
 }
 
-async function updateInNotion(apiKey, pageId, data) {
+async function getDatabaseProperties(apiKey, databaseId) {
+  if (cachedDbProperties) return cachedDbProperties;
+  return new Promise((resolve) => {
+    browserAPI.runtime.sendMessage({
+      type: 'FETCH_NOTION',
+      url: `https://api.notion.com/v1/databases/${databaseId}`,
+      method: 'GET',
+      apiKey: apiKey
+    }, (response) => {
+      if (response && response.success && response.data && response.data.properties) {
+        cachedDbProperties = response.data.properties;
+        resolve(cachedDbProperties);
+      } else {
+        resolve(null);
+      }
+    });
+  });
+}
+
+async function updateInNotion(apiKey, pageId, data, databaseId) {
+  const dbProps = databaseId ? await getDatabaseProperties(apiKey, databaseId) : cachedDbProperties;
   const body = {
-    properties: buildNotionProperties(data)
+    properties: buildNotionProperties(data, dbProps)
   };
 
   return new Promise((resolve) => {
@@ -464,8 +493,8 @@ async function updateInNotion(apiKey, pageId, data) {
   });
 }
 
-function buildNotionProperties(data) {
-  return {
+function buildNotionProperties(data, dbProperties = null) {
+  const props = {
     'Title': {
       title: [{ text: { content: data.title } }]
     },
@@ -527,10 +556,32 @@ function buildNotionProperties(data) {
       rich_text: data.neighborhood_analysis ? [{ text: { content: data.neighborhood_analysis } }] : []
     }
   };
+
+  // Safe addition of car travel time & distance based on DB schema
+  const carPropName = dbProperties
+    ? Object.keys(dbProperties).find(k => k.toLowerCase() === 'time to work (car)' || k.toLowerCase() === 'car time to work')
+    : 'Time to Work (Car)';
+  if (carPropName && (!dbProperties || dbProperties[carPropName])) {
+    props[carPropName] = {
+      number: data.time_to_work_car ? parseFloat(data.time_to_work_car) : null
+    };
+  }
+
+  const distPropName = dbProperties
+    ? Object.keys(dbProperties).find(k => k.toLowerCase() === 'distance to work' || k.toLowerCase() === 'distance to work (km)' || k.toLowerCase() === 'distance')
+    : 'Distance to Work';
+  if (distPropName && (!dbProperties || dbProperties[distPropName])) {
+    props[distPropName] = {
+      number: data.distance_to_work ? parseFloat(data.distance_to_work) : null
+    };
+  }
+
+  return props;
 }
 
 async function addToNotion(apiKey, databaseId, data) {
-  const properties = buildNotionProperties(data);
+  const dbProps = await getDatabaseProperties(apiKey, databaseId);
+  const properties = buildNotionProperties(data, dbProps);
   properties['Date Added'] = {
     date: { start: new Date().toISOString() }
   };
@@ -553,12 +604,11 @@ async function addToNotion(apiKey, databaseId, data) {
   });
 }
 
-
 async function calculateTimeToWork(apiKey, origin, destination) {
   const statusDiv = document.getElementById('status');
   statusDiv.textContent = 'Calculating travel time...';
 
-  // Find next Tuesday morning at 9am to avoid weekends and get consistent transit times
+  // Find next Tuesday morning at 9am to avoid weekends and get consistent transit/driving times
   const nextTuesday = new Date();
   nextTuesday.setDate(nextTuesday.getDate() + (7 - nextTuesday.getDay() + 2) % 7);
   nextTuesday.setHours(9, 0, 0, 0);
@@ -568,62 +618,91 @@ async function calculateTimeToWork(apiKey, origin, destination) {
     nextTuesday.setDate(nextTuesday.getDate() + 7);
   }
 
-  const arrivalTime = Math.floor(nextTuesday.getTime() / 1000);
-  // Using Directions API instead of Distance Matrix to get transit details (line names)
-  // Added &language=fr to get vehicle names (Métro, Bus, etc.) in French
-  const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&arrival_time=${arrivalTime}&mode=transit&language=fr&key=${apiKey}&transit_mode=rail`;
+  const targetTime = Math.floor(nextTuesday.getTime() / 1000);
+  const transitUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&arrival_time=${targetTime}&mode=transit&language=fr&key=${apiKey}&transit_mode=rail`;
+  const drivingUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&departure_time=${targetTime}&mode=driving&language=fr&key=${apiKey}`;
 
-  browserAPI.runtime.sendMessage({
-    type: 'FETCH_MAPS',
-    url: url
-  }, (response) => {
-    if (response && response.success) {
-      const data = response.data;
-      if (data.status === 'OK' && data.routes.length > 0) {
-        const route = data.routes[0];
-        const leg = route.legs[0];
-
-        // Duration
-        const duration = leg.duration.value;
-        const minutes = Math.round(duration / 60);
-        document.getElementById('time_to_work').value = minutes;
-
-        // Extract Transit Lines
-        const transitLines = [];
-        leg.steps.forEach(step => {
-          if (step.travel_mode === 'TRANSIT' && step.transit_details) {
-            const line = step.transit_details.line;
-            const vehicleName = line.vehicle ? line.vehicle.name : '';
-            const shortName = line.short_name || line.name;
-
-            // Format as "Vehicle ShortName" (e.g., "Bus 123", "Métro 1", "RER A")
-            let fullName = shortName;
-            if (vehicleName && shortName && !shortName.toLowerCase().includes(vehicleName.toLowerCase())) {
-              fullName = `${vehicleName} ${shortName}`;
-            } else if (vehicleName && !shortName) {
-              fullName = vehicleName;
-            }
-
-            if (fullName) transitLines.push(fullName);
-          }
-        });
-
-        const transitLinesStr = transitLines.join(', ');
-        document.getElementById('transit_lines').value = transitLinesStr;
-
-        statusDiv.textContent = `AI Fill + Travel Time: ${minutes} min (${transitLinesStr || 'Transit'})`;
-        statusDiv.style.color = 'green';
-      } else {
-        console.error('Google Maps Error:', data);
-        statusDiv.textContent = 'Maps calculation failed. Check API key/Address.';
-        statusDiv.style.color = 'orange';
-      }
-    } else {
-      console.error('Error fetching Directions via background:', response ? response.error : 'No response');
-      statusDiv.textContent = 'Error calculating distance.';
-      statusDiv.style.color = 'red';
-    }
+  const fetchPromise = (url) => new Promise((resolve) => {
+    browserAPI.runtime.sendMessage({
+      type: 'FETCH_MAPS',
+      url: url
+    }, (response) => {
+      resolve(response);
+    });
   });
+
+  try {
+    const [transitResponse, drivingResponse] = await Promise.all([
+      fetchPromise(transitUrl),
+      fetchPromise(drivingUrl)
+    ]);
+
+    let transitSummary = null;
+    let drivingSummary = null;
+
+    // Handle Transit Result
+    if (transitResponse && transitResponse.success && transitResponse.data.status === 'OK' && transitResponse.data.routes.length > 0) {
+      const leg = transitResponse.data.routes[0].legs[0];
+      const minutes = Math.round(leg.duration.value / 60);
+      document.getElementById('time_to_work').value = minutes;
+
+      const transitLines = [];
+      leg.steps.forEach(step => {
+        if (step.travel_mode === 'TRANSIT' && step.transit_details) {
+          const line = step.transit_details.line;
+          const vehicleName = line.vehicle ? line.vehicle.name : '';
+          const shortName = line.short_name || line.name;
+
+          let fullName = shortName;
+          if (vehicleName && shortName && !shortName.toLowerCase().includes(vehicleName.toLowerCase())) {
+            fullName = `${vehicleName} ${shortName}`;
+          } else if (vehicleName && !shortName) {
+            fullName = vehicleName;
+          }
+
+          if (fullName) transitLines.push(fullName);
+        }
+      });
+
+      const transitLinesStr = transitLines.join(', ');
+      document.getElementById('transit_lines').value = transitLinesStr;
+      transitSummary = `${minutes} min${transitLinesStr ? ` (${transitLinesStr})` : ''}`;
+    } else {
+      console.warn('Transit Directions failed or not available:', transitResponse);
+    }
+
+    // Handle Driving Result
+    if (drivingResponse && drivingResponse.success && drivingResponse.data.status === 'OK' && drivingResponse.data.routes.length > 0) {
+      const leg = drivingResponse.data.routes[0].legs[0];
+      const durationVal = (leg.duration_in_traffic && leg.duration_in_traffic.value) || leg.duration.value;
+      const carMinutes = Math.round(durationVal / 60);
+      const distanceKm = Math.round((leg.distance.value / 1000) * 10) / 10;
+
+      document.getElementById('time_to_work_car').value = carMinutes;
+      document.getElementById('distance_to_work').value = distanceKm;
+      drivingSummary = `${carMinutes} min (${distanceKm} km)`;
+    } else {
+      console.warn('Driving Directions failed or not available:', drivingResponse);
+    }
+
+    if (transitSummary && drivingSummary) {
+      statusDiv.textContent = `Transit: ${transitSummary} | Car: ${drivingSummary}`;
+      statusDiv.style.color = 'green';
+    } else if (transitSummary) {
+      statusDiv.textContent = `Transit: ${transitSummary}`;
+      statusDiv.style.color = 'green';
+    } else if (drivingSummary) {
+      statusDiv.textContent = `Car: ${drivingSummary}`;
+      statusDiv.style.color = 'green';
+    } else {
+      statusDiv.textContent = 'Maps calculation failed. Check API key/Address.';
+      statusDiv.style.color = 'orange';
+    }
+  } catch (err) {
+    console.error('Error calculating travel time:', err);
+    statusDiv.textContent = 'Error calculating travel time.';
+    statusDiv.style.color = 'red';
+  }
 }
 
 async function analyzeNeighborhood(googleApiKey, address) {

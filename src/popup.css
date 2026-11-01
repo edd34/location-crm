@@ -87,6 +87,17 @@ input, select {
   background-color: #f0f0f0;
 }
 
+.two-col-group {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.two-col-group .field {
+  flex: 1;
+  margin-bottom: 0;
+}
+
 .tri-state-group {
   display: flex;
   justify-content: space-between;

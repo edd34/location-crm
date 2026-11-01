@@ -35,8 +35,10 @@ Your Notion database **must** have the following properties (columns) with the e
 | **City** | Text | |
 | **Postal Code** | Text | |
 | **Neighborhood** | Text | |
-| **Time to Work** | Number | Commute time in minutes |
+| **Time to Work** | Number | Commute time in minutes (Transit) |
 | **Transit Lines** | Multi-select | List of lines (e.g., RER A, Bus 123) |
+| **Time to Work (Car)** | Number | Commute time by car in minutes |
+| **Distance to Work** | Number | Commute distance in km |
 | **Agency** | Text | Name of the agency |
 | **Agency Address** | Text | |
 | **Phone** | Phone | Contact number |
@@ -67,7 +69,7 @@ Click the **Settings (⚙️)** icon in the extension popup to enter your keys:
 2.  **Open the extension**: Click the extension icon.
 3.  **✨ AI Fill**: Click this button. The AI will read the page and automatically fill in the price, area, address, reference, etc.
 4.  **Top Pick (❤️)**: Click the heart if it's a property you really love.
-5.  **Check travel time**: It calculates the commute to your "Work Address" automatically.
+5.  **Check travel time**: It calculates the commute to your "Work Address" automatically (transit time & lines, car travel time, and distance in km).
 6.  **🔍 Analyze Neighborhood**: Click the magnifying glass to see how many metros, buses, and shops are within 1.5km (powered by OpenStreetMap).
 7.  **Add to Notion**: Click the blue button. If the property was already saved, the button will turn green and say **"Update in Notion"**.
 
