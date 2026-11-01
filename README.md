@@ -7,8 +7,8 @@ This extension allows you to quickly add rental property information to a Notion
 - Checks if the URL already exists in your Notion database before adding.
 - Auto-fills listing details using AI (OpenRouter LLM).
 - Calculates commute times (both transit and driving) and driving distance to your workplace using Google Maps.
-- Analyzes neighborhood points of interest across two radii: **1.5 km (walking)** and **10 minutes by car** (using IGN Géoplateforme isochrone and OpenStreetMap Overpass API).
-- Automatically writes a detailed POI breakdown (with names of stations, supermarkets, schools, etc.) as a **comment attached to the Notion page**, and logs summary counts into the `Neighborhood Analysis` property.
+- Analyzes neighborhood points of interest across two radii: **1.5 km (walking)** and **10 minutes by car** (using Google Places API and IGN Géoplateforme isochrone).
+- Automatically writes a detailed POI breakdown (with names of stations, supermarkets, schools, etc.) directly into the **Notion page description (body)**, and logs summary counts into the `Neighborhood Analysis` property.
 - Full cross-browser compatibility for **Chrome**, **Firefox**, **Edge**, and **Brave** (Manifest V3).
 
 ## Notion Setup
@@ -42,7 +42,7 @@ This extension allows you to quickly add rental property information to a Notion
 
 2.  **Create a Notion Integration:**
     - Go to [Notion Developers - My Integrations](https://www.notion.so/my-integrations).
-    - Create a new integration, ensure **"Insert comments"** capability is checked (under Capabilities), and copy the **Internal Integration Secret**.
+    - Create a new integration, give it a name, and copy the **Internal Integration Secret**.
     - Connect the integration to your database:
         - Open your database in Notion.
         - Click the "..." in the top right.
@@ -94,10 +94,10 @@ To comply with modern browser security and avoid CORS issues, this extension use
 When clicking the **🔍 (Analyze Neighborhood)** button:
 1. The address is geocoded using Google Maps Geocoding API.
 2. A **10-minute driving isochrone** polygon is calculated via the French public **IGN Géoplateforme** API (`data.geopf.fr/navigation/isochrone`).
-3. Points of interest are retrieved via **OpenStreetMap Overpass API** within the combined bounding box.
+3. Points of interest are retrieved via **Google Places API** (with OpenStreetMap Overpass API as fallback).
 4. Amenities are categorized and classified into:
    - **📍 1.5 km Walking Radius** (Haversine distance $\le 1.5\text{ km}$)
    - **🚗 10-Minute Driving Isochrone** (Point-in-polygon ray-casting)
 5. Upon saving or updating in Notion:
    - The summary counts are stored in the `Neighborhood Analysis` column.
-   - A structured breakdown detailing the categories, counts, and names of nearby stations, supermarkets, schools, and amenities is posted as a **comment directly attached to the Notion page**.
+   - A structured breakdown detailing the categories, counts, and names of nearby stations, supermarkets, schools, and amenities is written directly into the **Notion page body / description**.

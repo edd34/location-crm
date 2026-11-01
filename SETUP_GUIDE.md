@@ -55,7 +55,7 @@ Your Notion database **must** have the following properties (columns) with the e
 
 Click the **Settings (⚙️)** icon in the extension popup (or right-click the extension icon > Options) to open the dedicated Settings page in a browser tab without losing focus:
 
-1.  **Notion API Key**: Create one at [developers.notion.com](https://developers.notion.com/) (make sure "Insert comments" capability is enabled).
+1.  **Notion API Key**: Create one at [developers.notion.com](https://developers.notion.com/).
 2.  **Notion Database ID**: The string of characters in your database URL after the workspace name and before the `?`.
 3.  **OpenRouter API Key**: (For AI Fill) Get one at [openrouter.ai](https://openrouter.ai/).
 4.  **Google Maps API Key**: (For Travel Time) Required to calculate commute. Ensure "Directions API" is enabled.
@@ -70,7 +70,7 @@ Click the **Settings (⚙️)** icon in the extension popup (or right-click the 
 3.  **✨ AI Fill**: Click this button. The AI will read the page and automatically fill in the price, area, address, reference, etc.
 4.  **Top Pick (❤️)**: Click the heart if it's a property you really love.
 5.  **Check travel time**: It calculates the commute to your "Work Address" automatically (transit time & lines, car travel time, and distance in km).
-6.  **🔍 Analyze Neighborhood**: Click the magnifying glass to analyze points of interest within **1.5km (walking)** and **10 minutes by car** (powered by IGN isochrone & OpenStreetMap). Detailed lists and radii are automatically posted as a comment attached to the Notion page upon saving.
+6.  **🔍 Analyze Neighborhood**: Click the magnifying glass to analyze points of interest within **1.5km (walking)** and **10 minutes by car** (powered by Google Places & IGN isochrone). Detailed lists and radii are automatically written into the Notion page body / description upon saving.
 7.  **Add to Notion**: Click the blue button. If the property was already saved, the button will turn green and say **"Update in Notion"**.
 
 ---

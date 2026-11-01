@@ -502,14 +502,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       if (result.success) {
-        if (result.commentAdded || result.blocksAdded) {
+        if (result.blocksAdded) {
           statusDiv.textContent = existingPageId
-            ? 'Updated in Notion (with POI details & comment)!'
-            : 'Added to Notion (with POI details & comment)!';
+            ? 'Updated in Notion (with POI details)!'
+            : 'Added to Notion (with POI details)!';
           statusDiv.style.color = 'green';
-        } else if (result.commentError) {
-          statusDiv.textContent = (existingPageId ? 'Updated' : 'Added') + ' (⚠️ Comment: ' + result.commentError + ')';
-          statusDiv.style.color = '#d97706';
         } else {
           statusDiv.textContent = existingPageId ? 'Updated successfully!' : 'Added successfully!';
           statusDiv.style.color = 'green';
@@ -700,33 +697,19 @@ async function updateInNotion(apiKey, pageId, data, databaseId) {
     body: body
   });
 
-  if (updateRes && updateRes.success) {
-    if (latestPoiAnalysis) {
-      // 1. Append detailed POI blocks to the Notion page body / description
-      const blocks = buildNotionDescriptionBlocks(latestPoiAnalysis);
-      if (blocks.length > 0) {
-        const blockRes = await sendMessage({
-          type: 'FETCH_NOTION',
-          url: `https://api.notion.com/v1/blocks/${pageId}/children`,
-          method: 'PATCH',
-          apiKey: apiKey,
-          body: { children: blocks }
-        });
-        if (blockRes && blockRes.success) {
-          updateRes.blocksAdded = true;
-        }
+  if (updateRes && updateRes.success && latestPoiAnalysis) {
+    const blocks = buildNotionDescriptionBlocks(latestPoiAnalysis);
+    if (blocks.length > 0) {
+      const blockRes = await sendMessage({
+        type: 'FETCH_NOTION',
+        url: `https://api.notion.com/v1/blocks/${pageId}/children`,
+        method: 'PATCH',
+        apiKey: apiKey,
+        body: { children: blocks }
+      });
+      if (blockRes && blockRes.success) {
+        updateRes.blocksAdded = true;
       }
-
-      // 2. Also post as a comment attached to the Notion page
-      console.log("Adding POI comment on update for page:", pageId);
-      const commentRes = await addCommentToNotion(apiKey, pageId, latestPoiAnalysis);
-      if (commentRes && !commentRes.success) {
-        updateRes.commentError = commentRes.error;
-      } else if (commentRes && commentRes.success) {
-        updateRes.commentAdded = true;
-      }
-    } else {
-      console.log("No latestPoiAnalysis available to comment on update.");
     }
   }
 
@@ -805,113 +788,6 @@ function buildNotionDescriptionBlocks(poiAnalysis) {
   }
 
   return blocks;
-}
-
-function buildPoiCommentRichText(poiAnalysis) {
-  if (!poiAnalysis) return [];
-  const richText = [];
-  const boldAnnotation = { bold: true, italic: false, strikethrough: false, underline: false, code: false, color: 'default' };
-
-  richText.push({
-    type: 'text',
-    text: { content: "📍 Analyse du quartier et points d'intérêt\n\n" },
-    annotations: boldAnnotation
-  });
-
-  const categoryLabels = {
-    metro: '🚇 Métro',
-    rer: '🚆 RER / Train',
-    tram: '🚋 Tramway',
-    bus: '🚌 Bus',
-    supermarket: '🛒 Supermarchés',
-    shops: '🛍️ Commerces',
-    school: '🎓 Écoles & Universités',
-    sports: '🏋️ Sport & Loisirs'
-  };
-
-  // Section 1: Rayon de 1,5 km (à pied)
-  richText.push({
-    type: 'text',
-    text: { content: "📍 Dans un rayon de 1,5 km (à pied) :\n" },
-    annotations: boldAnnotation
-  });
-
-  for (const [cat, label] of Object.entries(categoryLabels)) {
-    const count = (poiAnalysis.summary1500m && poiAnalysis.summary1500m[cat]) || 0;
-    const names = (poiAnalysis.details1500m && poiAnalysis.details1500m[cat]) ? poiAnalysis.details1500m[cat].slice(0, 10) : [];
-    const line = names.length > 0
-      ? `• ${label} (${count}) : ${names.join(', ')}${names.length < count ? '...' : ''}\n`
-      : `• ${label} : ${count}\n`;
-    richText.push({
-      type: 'text',
-      text: { content: line }
-    });
-  }
-
-  richText.push({
-    type: 'text',
-    text: { content: "\n" }
-  });
-
-  // Section 2: Rayon de 10 min en voiture
-  richText.push({
-    type: 'text',
-    text: { content: "🚗 Dans un rayon de 10 min en voiture :\n" },
-    annotations: boldAnnotation
-  });
-
-  const carEntries = Object.entries(categoryLabels);
-  for (let i = 0; i < carEntries.length; i++) {
-    const [cat, label] = carEntries[i];
-    const count = (poiAnalysis.summaryCar && poiAnalysis.summaryCar[cat]) || 0;
-    const names = (poiAnalysis.detailsCar && poiAnalysis.detailsCar[cat]) ? poiAnalysis.detailsCar[cat].slice(0, 10) : [];
-    const line = names.length > 0
-      ? `• ${label} (${count}) : ${names.join(', ')}${names.length < count ? '...' : ''}${i < carEntries.length - 1 ? '\n' : ''}`
-      : `• ${label} : ${count}${i < carEntries.length - 1 ? '\n' : ''}`;
-    richText.push({
-      type: 'text',
-      text: { content: line }
-    });
-  }
-
-  return richText;
-}
-
-async function addCommentToNotion(apiKey, pageId, poiAnalysis) {
-  if (!poiAnalysis) {
-    console.warn("addCommentToNotion: No POI analysis provided");
-    return null;
-  }
-  const richText = buildPoiCommentRichText(poiAnalysis);
-  if (!richText || richText.length === 0) {
-    console.warn("addCommentToNotion: Rich text is empty");
-    return null;
-  }
-
-  console.log("Sending comment to Notion for page:", pageId);
-
-  try {
-    const commentRes = await sendMessage({
-      type: 'FETCH_NOTION',
-      url: 'https://api.notion.com/v1/comments',
-      method: 'POST',
-      apiKey: apiKey,
-      body: {
-        parent: { page_id: pageId },
-        rich_text: richText
-      }
-    });
-
-    console.log("Notion comment response:", commentRes);
-
-    if (!commentRes || !commentRes.success) {
-      console.error("Failed to add POI comment to Notion page:", commentRes ? commentRes.error : "Unknown error");
-    }
-    return commentRes;
-  } catch (err) {
-    console.error("Error calling addCommentToNotion:", err);
-    return { success: false, error: err.message };
-  }
 }
 
 function buildNotionProperties(data, dbProperties = null) {
@@ -1027,19 +903,8 @@ async function addToNotion(apiKey, databaseId, data) {
     body: body
   });
 
-  if (createRes && createRes.success && createRes.data && createRes.data.id) {
-    if (latestPoiAnalysis) {
-      createRes.blocksAdded = Boolean(body.children && body.children.length > 0);
-      console.log("Adding POI comment on create for new page:", createRes.data.id);
-      const commentRes = await addCommentToNotion(apiKey, createRes.data.id, latestPoiAnalysis);
-      if (commentRes && !commentRes.success) {
-        createRes.commentError = commentRes.error;
-      } else if (commentRes && commentRes.success) {
-        createRes.commentAdded = true;
-      }
-    } else {
-      console.log("No latestPoiAnalysis available to comment on create.");
-    }
+  if (createRes && createRes.success && latestPoiAnalysis) {
+    createRes.blocksAdded = Boolean(body.children && body.children.length > 0);
   }
 
   return createRes;
